@@ -1,0 +1,82 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+canvas {
+  display: block;
+}
+
+#pagesContainer {
+  display: flex;
+  flex-direction: column;
+  row-gap: 20px;
+
+  height: 90dvh;
+
+  padding: 10% 5%;
+
+  overflow: scroll;
+}
+
+.pageContainer {
+  position: relative;
+  border: 1px black solid;
+  margin: 0px auto;
+}
+
+.signaturesCanvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+#navbar {
+  height: 10dvh;
+
+  border: 1px blue solid;
+}
+
+#zoomOutButton,
+#zoomInButton,
+#pdfInputButton,
+#signButton {
+  font-size: 2rem;
+  padding: 10px 20px;
+}
+
+#signaturesModal,
+#signaturePadModal {
+  position: absolute;
+  left: 0;
+  top: 0;
+  background-color: white;
+  border: 1px red solid;
+}
+
+#signaturesModal {
+  padding: 10px;
+}
+
+#signaturesContainer {
+  display: flex;
+  flex-direction: column;
+  row-gap: 20px;
+  margin-bottom: 20px;
+}
+
+#signatureContainer {
+  display: flex;
+  align-items: center;
+  column-gap: 10px;
+  border: 1px black solid;
+}
+
+#signaturePadModal {
+  padding: 20px 30px;
+}
+
+#signaturePadCanvas {
+  border: 1px blue solid;
+}

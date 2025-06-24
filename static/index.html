@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+    <title>Document</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <input type="file" id="pdfInput" accept=".pdf" hidden />
+
+
+
+    <div id="pagesContainer" hidden></div>
+    <div id="navbar">
+        <button type="button" id="pdfInputButton">Escolher PDF</button>
+        <button type="button" id="zoomOutButton" hidden>-</button>
+        <button type="button" id="zoomInButton" hidden>+</button>
+        <button type="button" id="signButton" hidden>Assinar</button>
+    </div>
+
+    <div id="signaturesModal" hidden>
+        <div id="signaturesContainer"></div>
+        <button type="button" id="newSignatureButton">Nova assinatura</button>
+    </div>
+
+    <div id="signaturePadModal" hidden>
+        <span>Desenhe aqui</span>
+        <canvas id="signaturePadCanvas" width="261" height="150"></canvas>
+        <button type="button" id="clearNewSignatureButton" disabled>Limpar</button>
+        <button type="button" id="cancelNewSignatureButton">Cancelar</button>
+        <button type="button" id="createNewSignatureButton" disabled>Criar</button>
+    </div>
+
+    <script type="module" src="script.js"></script>
+</body>
+
+</html>

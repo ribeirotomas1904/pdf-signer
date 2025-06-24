@@ -1,0 +1,20 @@
+{
+  "name": "sistema-assinaturas",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "dev:server": "nodemon .",
+    "dev:client": "vite serve ./static --host",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "pdfjs-dist": "^5.3.31",
+    "signature_pad": "^5.0.10"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.10",
+    "vite": "^6.3.5"
+  }
+}
