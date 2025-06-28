@@ -11,12 +11,9 @@ canvas {
 #pagesContainer {
   display: flex;
   flex-direction: column;
-  row-gap: 20px;
+  row-gap: 10px;
 
   height: 90dvh;
-
-  padding: 10% 5%;
-
   overflow: scroll;
 }
 
@@ -41,8 +38,13 @@ canvas {
 #zoomOutButton,
 #zoomInButton,
 #pdfInputButton,
-#signButton {
-  font-size: 2rem;
+#signButton,
+#downloadButton,
+#newSignatureButton,
+#clearNewSignatureButton,
+#cancelNewSignatureButton,
+#createNewSignatureButton {
+  font-size: 1rem;
   padding: 10px 20px;
 }
 
@@ -63,10 +65,13 @@ canvas {
   display: flex;
   flex-direction: column;
   row-gap: 20px;
+}
+
+#signaturesContainer:not(:empty) {
   margin-bottom: 20px;
 }
 
-#signatureContainer {
+.signatureContainer {
   display: flex;
   align-items: center;
   column-gap: 10px;

@@ -24,3 +24,44 @@ what should be the default size of a signature in relation to the pdf?
 
 TODO: make css pixels ints like the actual canvas size, remember to test what are the values of width the canvas have compared to styles
 to check how the actual canvas size is being rounded
+
+CHANGE ZOOM/WHAT DOES IT MEAN TO BE 100 ZOOM, IN ORDER SO USERS DONT HAVE TO SCROLL SIDES ONCE LOADING THE PAGE
+
+REMEMBER TO CHNAGE SIGNATURE PAD CONFIG TO DRAW BETTER, MORE OFTEN
+
+
+
+HANDLE ZOOM CHANGING ON BROWSER, because that changes device pixel ratio
+
+
+
+
+
+REMOVE ALL GLOBAL VARIABLES ACCESSES FROM FUNCTIONS AND ACCESS THEM ONLY ON EVENT HANDLERS
+
+I THINK I NEED TO CANCEL RENDER SO I DONT TRIGGER TWO AT ONCE WHEN ZOOMING TOO QUICKLY, SEE HOW TO CANCEL RENDER ON PDFJS
+
+
+
+DEAL WITH WINDOWS RESIZE AND ZOOM AND ORIENTATION CHANGE
+
+
+
+FOR NOW IM IGNORING CROPBOX, ROTATION AND DIFFERENT SIZES ACROSS PDF JS AND PDF LIB
+
+IM ASSUMING ALL PDF PAGES HAVE THE SAME WIDTH FOR NOW
+
+
+FIX MOVING SIGNATURE ON MOBILE
+IMPLEMENT CONTEXTUAL MENU FOR SIGNATURE
+
+
+
+
+
+
+when close to the screen border and dragging a signature, the screen should move there
+make so i can move signatures between PAGES
+
+when i click on limpar or criar after signing, the buttons dont work sometimes
+when I create signaturesInstances by clicking on a already created signature template, the modal doesnt close
