@@ -129,6 +129,11 @@ pdfInputButton.addEventListener("pointerdown", (event) => {
 });
 
 panButton.addEventListener("click", () => {
+  selectedSignature = null;
+  if (!pdfDoc) {
+    throw new Error("This error should never happen");
+  }
+  render(pdfDoc);
   setPointerMode("pan");
 });
 selectButton.addEventListener("click", () => {
