@@ -3,7 +3,7 @@ import workerSrc from "pdfjs-dist/build/pdf.worker.mjs?url";
 import SignaturePad from "signature_pad";
 import { PDFDocument } from "@cantoo/pdf-lib";
 
-const SIGNATURE_WIDTH = 150;
+const SIGNATURE_WIDTH = 100;
 const INITIAL_ZOOM_PERCENTAGE = 100;
 const PAGES_CONTAINER_PADDING = 10;
 
