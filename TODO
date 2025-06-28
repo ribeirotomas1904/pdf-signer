@@ -64,3 +64,6 @@ when close to the screen border and dragging a signature, the screen should move
 make so i can move signatures between PAGES
 
 when i click on limpar or criar after signing, the buttons dont work sometimes
+
+
+when pressing on the signature and scrolling with the wheel, the position of the signature should be updated
