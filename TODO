@@ -1,4 +1,3 @@
-- Move signature
 - Delete signature
 
 - Scale signature
@@ -6,64 +5,30 @@
 - Implement go back and forward on signature
 - Select stroke color
 - Select stroke width
-- Download pdf
 - Page count
 
-- arrumar signatures ver se ela ta renderizando direito na hora de incluir a assinatura no pdf (em relação ao dpi), tbm se o tamanho fica certo
-- renderizar elas considerando o zoom, e manter elas mesmo dps de dar zoom
-- arrumar chamar render duas vezes em seguida bem rapido
-- transformar função render em async de verdade
 - arrumar ações com assinatura
 - arrumar render eficiente
 
 what happens to all canvases if mobile orientation is changed?
 
-what should be the default size of a signature in relation to the pdf?
-
-# IMPLEMENT DOWNLOAD PDF, TO TEST IF I CAN SAVE IT WITH SVG SIGNATURES
-
 TODO: make css pixels ints like the actual canvas size, remember to test what are the values of width the canvas have compared to styles
 to check how the actual canvas size is being rounded
 
-CHANGE ZOOM/WHAT DOES IT MEAN TO BE 100 ZOOM, IN ORDER SO USERS DONT HAVE TO SCROLL SIDES ONCE LOADING THE PAGE
-
 REMEMBER TO CHNAGE SIGNATURE PAD CONFIG TO DRAW BETTER, MORE OFTEN
 
-
-
 HANDLE ZOOM CHANGING ON BROWSER, because that changes device pixel ratio
-
-
-
-
 
 REMOVE ALL GLOBAL VARIABLES ACCESSES FROM FUNCTIONS AND ACCESS THEM ONLY ON EVENT HANDLERS
 
 I THINK I NEED TO CANCEL RENDER SO I DONT TRIGGER TWO AT ONCE WHEN ZOOMING TOO QUICKLY, SEE HOW TO CANCEL RENDER ON PDFJS
 
-
-
 DEAL WITH WINDOWS RESIZE AND ZOOM AND ORIENTATION CHANGE
 
-
-
-FOR NOW IM IGNORING CROPBOX, ROTATION AND DIFFERENT SIZES ACROSS PDF JS AND PDF LIB
-
-IM ASSUMING ALL PDF PAGES HAVE THE SAME WIDTH FOR NOW
-
-
-FIX MOVING SIGNATURE ON MOBILE
 IMPLEMENT CONTEXTUAL MENU FOR SIGNATURE
 
-
-
-
-
-
 when close to the screen border and dragging a signature, the screen should move there
-make so i can move signatures between PAGES
-
-when i click on limpar or criar after signing, the buttons dont work sometimes
-
 
 when pressing on the signature and scrolling with the wheel, the position of the signature should be updated
+
+when i click on limpar or criar after signing, the buttons dont work sometimes
