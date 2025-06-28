@@ -311,11 +311,11 @@ cancelSignaturesModal.addEventListener("click", (event) => {
   signaturesModal.hidden = true;
 });
 
-clearNewSignatureButton.addEventListener("click", (event) => {
+clearNewSignatureButton.addEventListener("pointerup", (event) => {
   clearSignaturePad();
 });
 
-cancelNewSignatureButton.addEventListener("click", (event) => {
+cancelNewSignatureButton.addEventListener("pointerup", (event) => {
   signaturePadModal.hidden = true;
   clearSignaturePad();
 });
@@ -331,7 +331,7 @@ signaturePad.addEventListener("beginStroke", () => {
   createNewSignatureButton.disabled = false;
 });
 
-createNewSignatureButton.addEventListener("click", (event) => {
+createNewSignatureButton.addEventListener("pointerup", (event) => {
   const dataUrl = signaturePad.toDataURL("image/svg+xml");
   const svg = signaturePad.toSVG();
 

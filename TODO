@@ -30,5 +30,3 @@ IMPLEMENT CONTEXTUAL MENU FOR SIGNATURE
 when close to the screen border and dragging a signature, the screen should move there
 
 when pressing on the signature and scrolling with the wheel, the position of the signature should be updated
-
-when i click on limpar or criar after signing, the buttons dont work sometimes
