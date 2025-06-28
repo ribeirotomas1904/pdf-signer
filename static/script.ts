@@ -96,6 +96,10 @@ const createNewSignatureButton = getElementByIdOrThrow(
 const downloadButton = getElementByIdOrThrow("downloadButton", "button");
 const panButton = getElementByIdOrThrow("panButton", "button");
 const selectButton = getElementByIdOrThrow("selectButton", "button");
+const cancelSignaturesModal = getElementByIdOrThrow(
+  "cancelSignaturesModal",
+  "button"
+);
 
 pagesContainer.style.padding = `${PAGES_CONTAINER_PADDING}px`;
 
@@ -288,11 +292,15 @@ zoomInButton.addEventListener("click", (event) => {
 });
 
 signButton.addEventListener("click", (event) => {
-  signaturesModal.hidden = !signaturesModal.hidden;
+  signaturesModal.hidden = !signaturePadModal.hidden;
 });
 
 newSignatureButton.addEventListener("click", (event) => {
   signaturePadModal.hidden = false;
+  signaturesModal.hidden = true;
+});
+
+cancelSignaturesModal.addEventListener("click", (event) => {
   signaturesModal.hidden = true;
 });
 
