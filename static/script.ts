@@ -237,6 +237,8 @@ pdfInput.addEventListener("change", async (event) => {
       }
 
       if (selectedSignature?.isPressed) {
+        selectedSignature.signature.pageIndex = index;
+
         const canvasRatio = pagesContainerRatio * (zoomPercentage / 100);
         const clickXOnPdf = event.offsetX / canvasRatio;
         const clickYOnPdf = event.offsetY / canvasRatio;
