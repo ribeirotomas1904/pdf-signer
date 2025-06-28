@@ -367,6 +367,7 @@ createNewSignatureButton.addEventListener("click", (event) => {
 
     img.addEventListener("click", (event) => {
       createNewSignatureInstance();
+      signaturesModal.hidden = true;
     });
   });
   img.src = dataUrl;
