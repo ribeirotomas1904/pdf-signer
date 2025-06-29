@@ -1,13 +1,8 @@
-- Delete signature
-
-- Scale signature
-
 - Implement go back and forward on signature
 - Select stroke color
 - Select stroke width
 - Page count
 
-- arrumar ações com assinatura
 - arrumar render eficiente
 
 what happens to all canvases if mobile orientation is changed?
@@ -25,8 +20,13 @@ I THINK I NEED TO CANCEL RENDER SO I DONT TRIGGER TWO AT ONCE WHEN ZOOMING TOO Q
 
 DEAL WITH WINDOWS RESIZE AND ZOOM AND ORIENTATION CHANGE
 
-IMPLEMENT CONTEXTUAL MENU FOR SIGNATURE
-
 when close to the screen border and dragging a signature, the screen should move there
 
 when pressing on the signature and scrolling with the wheel, the position of the signature should be updated
+
+IMPLEMENT CONTEXTUAL MENU FOR SIGNATURE
+- arrumar ações com assinatura
+- Delete signature
+- Scale signature
+- duplicate signature
+- insert signature on current canvas and position
