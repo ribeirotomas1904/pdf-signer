@@ -45,8 +45,6 @@ const [getPointerMode, setPointerMode] = (() => {
   return [
     () => pointerMode,
     (newPointerMode: PointerMode) => {
-      console.log({ newPointerMode });
-
       if (newPointerMode === "pan") {
         selectedSignature = null;
         pagesContainer.style.touchAction = "auto";
@@ -249,92 +247,15 @@ pdfInput.addEventListener("change", async (event) => {
   pdfCanvases = new Array(pdfDoc.numPages);
   signaturesCanvases = new Array(pdfDoc.numPages);
 
+  const signaturesCanvasToIndex: WeakMap<Element, number> = new WeakMap();
+
   for (let index = 0; index < pdfDoc.numPages; index++) {
     const pdfCanvas = document.createElement("canvas");
     pdfCanvas.className = "pdfCanvas";
 
     const signaturesCanvas = document.createElement("canvas");
     signaturesCanvas.className = "signaturesCanvas";
-
-    signaturesCanvas.addEventListener("pointerdown", async (event) => {
-      if (getPointerMode() === "pan") {
-        return;
-      }
-
-      selectedSignature = null;
-
-      const canvasRatio = pagesContainerRatio * (zoomPercentage / 100);
-      const clickXOnPdf = event.offsetX / canvasRatio;
-      const clickYOnPdf = event.offsetY / canvasRatio;
-
-      const signatureInstance = signatureInstances.find((signatureInstance) => {
-        const { img, x: signatureX, y: signatureY, scale } = signatureInstance;
-        const signatureSizeRatio = SIGNATURE_WIDTH / img.width;
-        const signatureWidth = img.width * signatureSizeRatio * scale;
-        const signatureHeight = img.height * signatureSizeRatio * scale;
-        return (
-          clickXOnPdf >= signatureX &&
-          clickXOnPdf <= signatureX + signatureWidth &&
-          clickYOnPdf >= signatureY &&
-          clickYOnPdf <= signatureY + signatureHeight
-        );
-      });
-
-      if (signatureInstance) {
-        selectedSignature = {
-          signature: signatureInstance,
-          offset: {
-            x: clickXOnPdf - signatureInstance.x,
-            y: clickYOnPdf - signatureInstance.y,
-          },
-          isPressed: true,
-        };
-
-        selectedSignature.signature.lastPressedTime = Date.now();
-      }
-
-      if (!pdfDoc) {
-        throw new Error("This error should never happen");
-      }
-      await render(pdfDoc);
-    });
-
-    signaturesCanvas.addEventListener("pointerup", async (event) => {
-      if (getPointerMode() === "pan") {
-        return;
-      }
-
-      if (selectedSignature?.isPressed) {
-        selectedSignature.isPressed = false;
-        signatureInstances.sort(
-          (a, b) => b.lastPressedTime - a.lastPressedTime
-        );
-      }
-    });
-
-    signaturesCanvas.addEventListener("pointermove", async (event) => {
-      if (getPointerMode() === "pan") {
-        return;
-      }
-
-      if (selectedSignature?.isPressed) {
-        selectedSignature.signature.pageIndex = index;
-
-        const canvasRatio = pagesContainerRatio * (zoomPercentage / 100);
-        const clickXOnPdf = event.offsetX / canvasRatio;
-        const clickYOnPdf = event.offsetY / canvasRatio;
-
-        selectedSignature.signature.x =
-          clickXOnPdf - selectedSignature.offset.x;
-        selectedSignature.signature.y =
-          clickYOnPdf - selectedSignature.offset.y;
-
-        if (!pdfDoc) {
-          throw new Error("This error should never happen");
-        }
-        await render(pdfDoc);
-      }
-    });
+    signaturesCanvasToIndex.set(signaturesCanvas, index);
 
     const pageContainer = document.createElement("div");
     pageContainer.className = "pageContainer";
@@ -346,6 +267,114 @@ pdfInput.addEventListener("change", async (event) => {
     pdfCanvases[index] = pdfCanvas;
     signaturesCanvases[index] = signaturesCanvas;
   }
+
+  pagesContainer.addEventListener("pointerdown", async (event) => {
+    if (getPointerMode() === "pan") {
+      return;
+    }
+
+    const element = document.elementFromPoint(event.clientX, event.clientY);
+
+    if (!element) {
+      return;
+    }
+
+    const index = signaturesCanvasToIndex.get(element);
+
+    if (index === undefined) {
+      return;
+    }
+
+    selectedSignature = null;
+
+    const canvasRatio = pagesContainerRatio * (zoomPercentage / 100);
+
+    const rect = element.getBoundingClientRect();
+    const offsetX = event.clientX - rect.left;
+    const offsetY = event.clientY - rect.top;
+
+    const clickXOnPdf = offsetX / canvasRatio;
+    const clickYOnPdf = offsetY / canvasRatio;
+
+    const signatureInstance = signatureInstances.find((signatureInstance) => {
+      const { img, x: signatureX, y: signatureY, scale } = signatureInstance;
+      const signatureSizeRatio = SIGNATURE_WIDTH / img.width;
+      const signatureWidth = img.width * signatureSizeRatio * scale;
+      const signatureHeight = img.height * signatureSizeRatio * scale;
+      return (
+        clickXOnPdf >= signatureX &&
+        clickXOnPdf <= signatureX + signatureWidth &&
+        clickYOnPdf >= signatureY &&
+        clickYOnPdf <= signatureY + signatureHeight
+      );
+    });
+
+    if (signatureInstance) {
+      selectedSignature = {
+        signature: signatureInstance,
+        offset: {
+          x: clickXOnPdf - signatureInstance.x,
+          y: clickYOnPdf - signatureInstance.y,
+        },
+        isPressed: true,
+      };
+
+      selectedSignature.signature.lastPressedTime = Date.now();
+    }
+
+    if (!pdfDoc) {
+      throw new Error("This error should never happen");
+    }
+    await render(pdfDoc);
+  });
+  pagesContainer.addEventListener("pointermove", async (event) => {
+    if (getPointerMode() === "pan") {
+      return;
+    }
+
+    const element = document.elementFromPoint(event.clientX, event.clientY);
+
+    if (!element) {
+      return;
+    }
+
+    const index = signaturesCanvasToIndex.get(element);
+
+    if (index === undefined) {
+      return;
+    }
+
+    if (selectedSignature?.isPressed) {
+      selectedSignature.signature.pageIndex = index;
+
+      const canvasRatio = pagesContainerRatio * (zoomPercentage / 100);
+
+      const rect = element.getBoundingClientRect();
+      const offsetX = event.clientX - rect.left;
+      const offsetY = event.clientY - rect.top;
+
+      const clickXOnPdf = offsetX / canvasRatio;
+      const clickYOnPdf = offsetY / canvasRatio;
+
+      selectedSignature.signature.x = clickXOnPdf - selectedSignature.offset.x;
+      selectedSignature.signature.y = clickYOnPdf - selectedSignature.offset.y;
+
+      if (!pdfDoc) {
+        throw new Error("This error should never happen");
+      }
+      await render(pdfDoc);
+    }
+  });
+  pagesContainer.addEventListener("pointerup", async (event) => {
+    if (getPointerMode() === "pan") {
+      return;
+    }
+
+    if (selectedSignature?.isPressed) {
+      selectedSignature.isPressed = false;
+      signatureInstances.sort((a, b) => b.lastPressedTime - a.lastPressedTime);
+    }
+  });
 
   await render(pdfDoc);
 
@@ -528,7 +557,7 @@ async function render(pdfDoc: pdfjs.PDFDocumentProxy) {
 
     tasksDoneCount++;
     if (tasksDoneCount === pdfCanvases.length) {
-      console.log("PDF RENDER TIME:", performance.now() - renderTimeStart);
+      // console.log("PDF RENDER TIME:", performance.now() - renderTimeStart);
     }
   });
 
