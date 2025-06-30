@@ -35,16 +35,7 @@ canvas {
   border: 1px blue solid;
 }
 
-#zoomOutButton,
-#zoomInButton,
-#pdfInputButton,
-#signButton,
-#downloadButton,
-#newSignatureButton,
-#clearNewSignatureButton,
-#cancelNewSignatureButton,
-#createNewSignatureButton,
-#cancelSignaturesModal {
+button {
   font-size: 1rem;
   padding: 10px 20px;
 }

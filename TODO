@@ -25,8 +25,6 @@ when close to the screen border and dragging a signature, the screen should move
 when pressing on the signature and scrolling with the wheel, the position of the signature should be updated
 
 IMPLEMENT CONTEXTUAL MENU FOR SIGNATURE
-- arrumar ações com assinatura
-- Delete signature
-- Scale signature
-- duplicate signature
 - insert signature on current canvas and position
+
+mover entre paginas no mobile (ao menos simulado no pc) não esta funcionando

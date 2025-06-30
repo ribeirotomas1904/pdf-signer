@@ -100,6 +100,87 @@ const cancelSignaturesModal = getElementByIdOrThrow(
   "cancelSignaturesModal",
   "button"
 );
+const duplicateSignatureButton = getElementByIdOrThrow(
+  "duplicateSignatureButton",
+  "button"
+);
+const deleteSignatureButton = getElementByIdOrThrow(
+  "deleteSignatureButton",
+  "button"
+);
+const increaseSignatureButton = getElementByIdOrThrow(
+  "increaseSignatureButton",
+  "button"
+);
+const decreaseSignatureButton = getElementByIdOrThrow(
+  "decreaseSignatureButton",
+  "button"
+);
+
+duplicateSignatureButton.addEventListener("click", () => {
+  if (selectedSignature) {
+    const newSignature: SignatureInstance = {
+      id: Symbol(),
+      img: selectedSignature.signature.img,
+      lastPressedTime: Date.now(),
+      pageIndex: selectedSignature.signature.pageIndex,
+      scale: selectedSignature.signature.scale,
+      svg: selectedSignature.signature.svg,
+      x: selectedSignature.signature.x,
+      y: selectedSignature.signature.y + 10,
+    };
+    signatureInstances.unshift(newSignature);
+    selectedSignature.signature = newSignature;
+
+    if (!pdfDoc) {
+      throw new Error("pdfDoc");
+    }
+
+    render(pdfDoc);
+  }
+});
+deleteSignatureButton.addEventListener("click", () => {
+  if (selectedSignature) {
+    signatureInstances = signatureInstances.filter(
+      (signature) => signature.id !== selectedSignature?.signature.id
+    );
+    selectedSignature = null;
+
+    if (!pdfDoc) {
+      throw new Error("pdfDoc");
+    }
+
+    render(pdfDoc);
+  }
+});
+increaseSignatureButton.addEventListener("click", () => {
+  if (selectedSignature) {
+    selectedSignature.signature.scale = Math.min(
+      selectedSignature.signature.scale * 1.1,
+      10
+    );
+
+    if (!pdfDoc) {
+      throw new Error("pdfDoc");
+    }
+
+    render(pdfDoc);
+  }
+});
+decreaseSignatureButton.addEventListener("click", () => {
+  if (selectedSignature) {
+    selectedSignature.signature.scale = Math.max(
+      selectedSignature.signature.scale * 0.9,
+      0.1
+    );
+
+    if (!pdfDoc) {
+      throw new Error("pdfDoc");
+    }
+
+    render(pdfDoc);
+  }
+});
 
 pagesContainer.style.padding = `${PAGES_CONTAINER_PADDING}px`;
 
@@ -352,10 +433,10 @@ createNewSignatureButton.addEventListener("pointerup", (event) => {
         id: Symbol(),
         img,
         svg,
-        x: 50,
-        y: 50,
+        x: 50, // TODO: needs to be in the viewport
+        y: 50, // TODO: needs to be in the viewport
         scale: 1,
-        pageIndex: 0,
+        pageIndex: 0, // TODO: needs to be the current page
         lastPressedTime: Date.now(),
       };
       signatureInstances.unshift(newSignatureInstance);
@@ -453,7 +534,10 @@ async function render(pdfDoc: pdfjs.PDFDocumentProxy) {
 
   await Promise.all(pdfRenderPromises);
 
-  signatureInstances.forEach(drawSignatureInstance);
+  signatureInstances.reduceRight((_, signature) => {
+    drawSignatureInstance(signature);
+    return null;
+  }, null);
 
   isRendering = false;
 }
@@ -478,14 +562,16 @@ function drawSignatureInstance(signatureInstance: SignatureInstance) {
     img.width * signatureSizeRatio * scale * canvasRatio,
     img.height * signatureSizeRatio * scale * canvasRatio
   );
-  context.strokeStyle =
-    signatureInstance.id === selectedSignature?.signature.id ? "red" : "blue";
-  context.strokeRect(
-    x * canvasRatio,
-    y * canvasRatio,
-    img.width * signatureSizeRatio * scale * canvasRatio,
-    img.height * signatureSizeRatio * scale * canvasRatio
-  );
+
+  if (signatureInstance.id === selectedSignature?.signature.id) {
+    context.strokeStyle = "blue";
+    context.strokeRect(
+      x * canvasRatio,
+      y * canvasRatio,
+      img.width * signatureSizeRatio * scale * canvasRatio,
+      img.height * signatureSizeRatio * scale * canvasRatio
+    );
+  }
 }
 
 downloadButton.addEventListener("click", download);
