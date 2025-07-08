@@ -26,3 +26,24 @@ when pressing on the signature and scrolling with the wheel, the position of the
 
 IMPLEMENT CONTEXTUAL MENU FOR SIGNATURE
 - insert signature on current canvas and position
+
+ON ZOOM I NEED TO MAINTAIN THE SAME PAGE
+
+
+ERROR WHEN USING ZOOM OUT ON LAST PAGES
+
+
+
+
+
+
+
+
+
+
+
+
+
+FIX ROTATION PROBLEM
+FIX SEEING ARTIFACTS OR NOT RENDERING WHEN I STOP SOMETIMES
+IMPROVE UI A BIT

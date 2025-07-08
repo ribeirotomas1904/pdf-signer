@@ -3,18 +3,7 @@ import workerSrc from "pdfjs-dist/build/pdf.worker.mjs?url";
 import SignaturePad from "signature_pad";
 import { PDFDocument } from "@cantoo/pdf-lib";
 
-const SIGNATURE_WIDTH = 100;
-const INITIAL_ZOOM_PERCENTAGE = 100;
-const PAGES_CONTAINER_PADDING = 10;
-
 pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
-const devicePixelRatio = Math.max(window.devicePixelRatio || 1, 1);
-
-let pdfFile: File | undefined;
-let pdfDoc: pdfjs.PDFDocumentProxy | undefined;
-
-let pdfCanvases: HTMLCanvasElement[] = [];
-let signaturesCanvases: HTMLCanvasElement[] = [];
 
 type SignatureInstance = {
   id: symbol;
@@ -27,17 +16,39 @@ type SignatureInstance = {
   lastPressedTime: number;
 };
 
-let signatureInstances: SignatureInstance[] = [];
-
-let selectedSignature: {
+type SelectedSignature = {
   signature: SignatureInstance;
   offset: { x: number; y: number };
   isPressed: boolean;
-} | null = null;
+};
 
 type PointerMode = "pan" | "select";
 
-const assertNever = (never: never) => {};
+const SIGNATURE_WIDTH = 100;
+const INITIAL_ZOOM_PERCENTAGE = 80;
+const PAGES_CONTAINER_PADDING = 10;
+const PAGES_CONTAINER_ROW_GAP = 10;
+
+const devicePixelRatio = Math.max(window.devicePixelRatio || 1, 1);
+
+let pdfFile: File | null = null;
+let pdfDoc: pdfjs.PDFDocumentProxy | null = null;
+
+let pdfCanvases: HTMLCanvasElement[] = [];
+let signaturesCanvases: HTMLCanvasElement[] = [];
+
+let signatureInstances: SignatureInstance[] = [];
+let selectedSignature: SelectedSignature | null = null;
+
+let pagesContainerRatio = 1;
+let zoomPercentage = INITIAL_ZOOM_PERCENTAGE;
+
+let signaturesCanvasToIndex: WeakMap<Element, number> = new WeakMap();
+
+let pdfSize: { width: number, height: number } | null = null;
+
+let firstVisiblePageIndex: number | null = null
+let firstLoadedPageIndex: number | null = null
 
 const [getPointerMode, setPointerMode] = (() => {
   let pointerMode: PointerMode = "select";
@@ -59,13 +70,6 @@ const [getPointerMode, setPointerMode] = (() => {
   ];
 })();
 
-let pagesContainerRatio = 1;
-let zoomPercentage = INITIAL_ZOOM_PERCENTAGE;
-
-const signaturePadCanvas = getElementByIdOrThrow(
-  "signaturePadCanvas",
-  "canvas"
-);
 const pdfInput = getElementByIdOrThrow("pdfInput", "input");
 const pdfInputButton = getElementByIdOrThrow("pdfInputButton", "button");
 const pagesContainer = getElementByIdOrThrow("pagesContainer", "div");
@@ -115,83 +119,32 @@ const decreaseSignatureButton = getElementByIdOrThrow(
   "button"
 );
 
-duplicateSignatureButton.addEventListener("click", () => {
-  if (selectedSignature) {
-    const newSignature: SignatureInstance = {
-      id: Symbol(),
-      img: selectedSignature.signature.img,
-      lastPressedTime: Date.now(),
-      pageIndex: selectedSignature.signature.pageIndex,
-      scale: selectedSignature.signature.scale,
-      svg: selectedSignature.signature.svg,
-      x: selectedSignature.signature.x,
-      y: selectedSignature.signature.y + 10,
-    };
-    signatureInstances.unshift(newSignature);
-    selectedSignature.signature = newSignature;
+const pagesViewport = getElementByIdOrThrow("pagesViewport", "div");
 
-    if (!pdfDoc) {
-      throw new Error("pdfDoc");
-    }
+// TODO: improve name
+let lastY = pagesViewport.scrollTop;
 
-    render(pdfDoc);
-  }
-});
-deleteSignatureButton.addEventListener("click", () => {
-  if (selectedSignature) {
-    signatureInstances = signatureInstances.filter(
-      (signature) => signature.id !== selectedSignature?.signature.id
-    );
-    selectedSignature = null;
 
-    if (!pdfDoc) {
-      throw new Error("pdfDoc");
-    }
-
-    render(pdfDoc);
-  }
-});
-increaseSignatureButton.addEventListener("click", () => {
-  if (selectedSignature) {
-    selectedSignature.signature.scale = Math.min(
-      selectedSignature.signature.scale * 1.1,
-      10
-    );
-
-    if (!pdfDoc) {
-      throw new Error("pdfDoc");
-    }
-
-    render(pdfDoc);
-  }
-});
-decreaseSignatureButton.addEventListener("click", () => {
-  if (selectedSignature) {
-    selectedSignature.signature.scale = Math.max(
-      selectedSignature.signature.scale * 0.9,
-      0.1
-    );
-
-    if (!pdfDoc) {
-      throw new Error("pdfDoc");
-    }
-
-    render(pdfDoc);
-  }
-});
-
-pagesContainer.style.padding = `${PAGES_CONTAINER_PADDING}px`;
+const signaturePadCanvas = getElementByIdOrThrow(
+  "signaturePadCanvas",
+  "canvas"
+);
 
 // TODO: solve this shit
 // @ts-ignore
-const signaturePad = new SignaturePad(signaturePadCanvas);
+const signaturePad = new SignaturePad(signaturePadCanvas, {
+  minWidth: 0.3, // thin strokes for elegance
+  maxWidth: 1.2, // max stroke width for natural variation
+  throttle: 0, // reduces jitter for smoother lines
+  minDistance: 2, // minimum movement before new point, helps smoothness
+});
 
 signaturePadCanvas.style.width = `${signaturePadCanvas.width}px`;
 signaturePadCanvas.style.height = `${signaturePadCanvas.height}px`;
 signaturePadCanvas.width *= devicePixelRatio;
 signaturePadCanvas.height *= devicePixelRatio;
 const context = signaturePadCanvas.getContext("2d");
-if (!context) {
+if (context == null) {
   throw new Error("Wasn't able to get canvas context");
 }
 context.scale(devicePixelRatio, devicePixelRatio);
@@ -209,7 +162,7 @@ pdfInputButton.addEventListener("pointerdown", (event) => {
 
 panButton.addEventListener("click", () => {
   selectedSignature = null;
-  if (!pdfDoc) {
+  if (pdfDoc == null) {
     throw new Error("This error should never happen");
   }
   render(pdfDoc);
@@ -219,10 +172,29 @@ selectButton.addEventListener("click", () => {
   setPointerMode("select");
 });
 
-pdfInput.addEventListener("change", async (event) => {
-  pdfFile = pdfInput.files?.[0];
+let ignoreNextScroll = false;
 
-  if (!pdfFile) {
+pagesViewport.addEventListener('scroll', () => {
+  if (ignoreNextScroll) {
+    ignoreNextScroll = false;
+    return;
+  }
+
+  const currentY = pagesViewport.scrollTop;
+  if (currentY === lastY) {
+    return
+  }
+
+  lastY = currentY
+  afterSizeChanges()
+}
+)
+
+
+pdfInput.addEventListener("change", async (event) => {
+  pdfFile = pdfInput.files?.[0] ?? null;
+
+  if (pdfFile == null) {
     alert("PDF não selecionado");
     return;
   }
@@ -230,6 +202,7 @@ pdfInput.addEventListener("change", async (event) => {
   pdfInputButton.hidden = true;
 
   const pdfBytes = await pdfFile.arrayBuffer();
+  // TODO: catch exception in case the file is not really a pdf
   pdfDoc = await pdfjs.getDocument({ data: pdfBytes }).promise;
 
   if (pdfDoc.numPages <= 0) {
@@ -237,146 +210,19 @@ pdfInput.addEventListener("change", async (event) => {
     return;
   }
 
+  // TODO: i'm assuming all pages have the same width and height as the first page
   const firstPage = await pdfDoc.getPage(1);
-  const pageWidth = firstPage.getViewport({ scale: 1 }).width;
-  const pagesContainerWidth = pagesContainer.getBoundingClientRect().width;
+  const { width, height } = firstPage.getViewport({ scale: 1 });
+  pdfSize = {
+    width,
+    height,
+  };
 
-  pagesContainerRatio =
-    (pagesContainerWidth - PAGES_CONTAINER_PADDING * 3) / pageWidth;
+  afterSizeChanges()
 
-  pdfCanvases = new Array(pdfDoc.numPages);
-  signaturesCanvases = new Array(pdfDoc.numPages);
-
-  const signaturesCanvasToIndex: WeakMap<Element, number> = new WeakMap();
-
-  for (let index = 0; index < pdfDoc.numPages; index++) {
-    const pdfCanvas = document.createElement("canvas");
-    pdfCanvas.className = "pdfCanvas";
-
-    const signaturesCanvas = document.createElement("canvas");
-    signaturesCanvas.className = "signaturesCanvas";
-    signaturesCanvasToIndex.set(signaturesCanvas, index);
-
-    const pageContainer = document.createElement("div");
-    pageContainer.className = "pageContainer";
-    pageContainer.appendChild(pdfCanvas);
-    pageContainer.appendChild(signaturesCanvas);
-
-    pagesContainer.appendChild(pageContainer);
-
-    pdfCanvases[index] = pdfCanvas;
-    signaturesCanvases[index] = signaturesCanvas;
-  }
-
-  pagesContainer.addEventListener("pointerdown", async (event) => {
-    if (getPointerMode() === "pan") {
-      return;
-    }
-
-    const element = document.elementFromPoint(event.clientX, event.clientY);
-
-    if (!element) {
-      return;
-    }
-
-    const index = signaturesCanvasToIndex.get(element);
-
-    if (index === undefined) {
-      return;
-    }
-
-    selectedSignature = null;
-
-    const canvasRatio = pagesContainerRatio * (zoomPercentage / 100);
-
-    const rect = element.getBoundingClientRect();
-    const offsetX = event.clientX - rect.left;
-    const offsetY = event.clientY - rect.top;
-
-    const clickXOnPdf = offsetX / canvasRatio;
-    const clickYOnPdf = offsetY / canvasRatio;
-
-    const signatureInstance = signatureInstances.find((signatureInstance) => {
-      const { img, x: signatureX, y: signatureY, scale } = signatureInstance;
-      const signatureSizeRatio = SIGNATURE_WIDTH / img.width;
-      const signatureWidth = img.width * signatureSizeRatio * scale;
-      const signatureHeight = img.height * signatureSizeRatio * scale;
-      return (
-        clickXOnPdf >= signatureX &&
-        clickXOnPdf <= signatureX + signatureWidth &&
-        clickYOnPdf >= signatureY &&
-        clickYOnPdf <= signatureY + signatureHeight
-      );
-    });
-
-    if (signatureInstance) {
-      selectedSignature = {
-        signature: signatureInstance,
-        offset: {
-          x: clickXOnPdf - signatureInstance.x,
-          y: clickYOnPdf - signatureInstance.y,
-        },
-        isPressed: true,
-      };
-
-      selectedSignature.signature.lastPressedTime = Date.now();
-    }
-
-    if (!pdfDoc) {
-      throw new Error("This error should never happen");
-    }
-    await render(pdfDoc);
-  });
-  pagesContainer.addEventListener("pointermove", async (event) => {
-    if (getPointerMode() === "pan") {
-      return;
-    }
-
-    const element = document.elementFromPoint(event.clientX, event.clientY);
-
-    if (!element) {
-      return;
-    }
-
-    const index = signaturesCanvasToIndex.get(element);
-
-    if (index === undefined) {
-      return;
-    }
-
-    if (selectedSignature?.isPressed) {
-      selectedSignature.signature.pageIndex = index;
-
-      const canvasRatio = pagesContainerRatio * (zoomPercentage / 100);
-
-      const rect = element.getBoundingClientRect();
-      const offsetX = event.clientX - rect.left;
-      const offsetY = event.clientY - rect.top;
-
-      const clickXOnPdf = offsetX / canvasRatio;
-      const clickYOnPdf = offsetY / canvasRatio;
-
-      selectedSignature.signature.x = clickXOnPdf - selectedSignature.offset.x;
-      selectedSignature.signature.y = clickYOnPdf - selectedSignature.offset.y;
-
-      if (!pdfDoc) {
-        throw new Error("This error should never happen");
-      }
-      await render(pdfDoc);
-    }
-  });
-  pagesContainer.addEventListener("pointerup", async (event) => {
-    if (getPointerMode() === "pan") {
-      return;
-    }
-
-    if (selectedSignature?.isPressed) {
-      selectedSignature.isPressed = false;
-      signatureInstances.sort((a, b) => b.lastPressedTime - a.lastPressedTime);
-    }
-  });
-
-  await render(pdfDoc);
+  pagesContainer.addEventListener("pointerdown", pagesContainerPointerDown);
+  pagesContainer.addEventListener("pointermove", pagesContainerPointerMove);
+  pagesContainer.addEventListener("pointerup", pagesContainerPointerUp);
 
   panButton.hidden = getPointerMode() === "select";
   selectButton.hidden = getPointerMode() === "select";
@@ -393,19 +239,16 @@ pdfInput.addEventListener("change", async (event) => {
 zoomOutButton.addEventListener("click", (event) => {
   zoomPercentage = Math.max(zoomPercentage - 10, 10);
 
-  if (!pdfDoc) {
-    throw new Error("This error should never happen");
-  }
-  render(pdfDoc);
+  afterSizeChanges()
+
 });
 
 zoomInButton.addEventListener("click", (event) => {
-  zoomPercentage = Math.min(zoomPercentage + 10, 1000);
+  zoomPercentage = Math.min(zoomPercentage + 10, 200);
 
-  if (!pdfDoc) {
-    throw new Error("This error should never happen");
-  }
-  render(pdfDoc);
+
+
+  afterSizeChanges()
 });
 
 signButton.addEventListener("click", (event) => {
@@ -481,7 +324,7 @@ createNewSignatureButton.addEventListener("pointerup", (event) => {
 
       setPointerMode("select");
 
-      if (!pdfDoc) {
+      if (pdfDoc == null) {
         throw new Error("This error should never happen");
       }
 
@@ -508,7 +351,10 @@ createNewSignatureButton.addEventListener("pointerup", (event) => {
 
 let isRendering = false;
 
+// TODO: is this more blurry?
 async function render(pdfDoc: pdfjs.PDFDocumentProxy) {
+
+
   if (isRendering) {
     return;
   }
@@ -519,7 +365,11 @@ async function render(pdfDoc: pdfjs.PDFDocumentProxy) {
   let tasksDoneCount = 0;
 
   const pdfRenderPromises = pdfCanvases.map(async (pdfCanvas, index) => {
-    const page = await pdfDoc.getPage(index + 1);
+    if (firstLoadedPageIndex == null) {
+      return
+    }
+
+    const page = await pdfDoc.getPage(firstLoadedPageIndex + index + 1);
 
     const scale = pagesContainerRatio * (zoomPercentage / 100);
     const scaledViewport = page.getViewport({ scale });
@@ -530,7 +380,7 @@ async function render(pdfDoc: pdfjs.PDFDocumentProxy) {
     pdfCanvas.style.height = `${Math.floor(scaledViewport.height)}px`;
 
     const signaturesCanvas = signaturesCanvases[index];
-    if (!signaturesCanvas) {
+    if (signaturesCanvas == null) {
       throw new Error("This error should never happen");
     }
     signaturesCanvas.width = scaledViewport.width * devicePixelRatio;
@@ -542,7 +392,7 @@ async function render(pdfDoc: pdfjs.PDFDocumentProxy) {
 
     const canvasContext = pdfCanvas.getContext("2d");
 
-    if (!canvasContext) {
+    if (canvasContext == null) {
       throw new Error("Wasn't able to get canvas context");
     }
 
@@ -557,7 +407,7 @@ async function render(pdfDoc: pdfjs.PDFDocumentProxy) {
 
     tasksDoneCount++;
     if (tasksDoneCount === pdfCanvases.length) {
-      // console.log("PDF RENDER TIME:", performance.now() - renderTimeStart);
+      console.log("PDF RENDER TIME:", performance.now() - renderTimeStart);
     }
   });
 
@@ -571,6 +421,153 @@ async function render(pdfDoc: pdfjs.PDFDocumentProxy) {
   isRendering = false;
 }
 
+
+function renderSignaturePage(canvasIndex: number) {
+  signatureInstances.forEach((signature) => {
+    if (signature.pageIndex === canvasIndex) {
+      drawSignatureInstance(signature)
+    }
+  })
+}
+
+// list of actions that can cause a re-render and what should re-render
+
+// create signature -> draw just that one signature
+// delete signature -> draw signature page
+// move signature in page -> draw signature page
+// resize signature -> draw signature page
+// select signature -> draw signature page
+// deselect signature -> draw signature page
+// move signature across pages -> draw signature in both pages
+
+// zoom -> render everything
+
+// scroll -> render only if firstVisiblePageIndex change
+
+// select pdf -> render everything
+
+// resize window -> render everything
+
+// change orientation -> render everything
+
+
+// TODO: this should run on resize, zoom, scroll, pdf change
+function afterSizeChanges() {
+  if (isRendering) {
+    return
+  }
+
+  if (pdfDoc == null || pdfSize == null) {
+    return;
+  }
+
+  // Gets the size of the screen
+  const { width: pagesViewportWidth, height: pagesViewportHeight } =
+    pagesViewport.getBoundingClientRect();
+
+  // Gets the ratio that the pdf page needs to be multiplied by
+  // in order to fill the screen minus de padding considering a 100% zoom 
+  pagesContainerRatio =
+    (pagesViewportWidth - PAGES_CONTAINER_PADDING * 2) / pdfSize.width;
+
+  // Gets the height of the pdf on screen
+  const pdfHeightOnScreen =
+    pdfSize.height * pagesContainerRatio * (zoomPercentage / 100);
+
+  const pdfWidthOnScreen =
+    pdfSize.width * pagesContainerRatio * (zoomPercentage / 100);
+
+  // Gets the total height of all pdf pages on screen, considering padding and row gaps
+  const pagesContainerHeight =
+    PAGES_CONTAINER_PADDING * 2 +
+    pdfHeightOnScreen * pdfDoc.numPages +
+    PAGES_CONTAINER_ROW_GAP * (pdfDoc.numPages - 1);
+
+  const pagesContainerWidth = PAGES_CONTAINER_PADDING * 2 + pdfWidthOnScreen;
+
+  const currentScrollTop = pagesViewport.scrollTop;
+  const currentScrollRange = parseFloat(pagesContainer.style.height) - pagesViewport.clientHeight;
+  const scrollPercent = currentScrollRange > 0 ? currentScrollTop / currentScrollRange : 0; 
+
+  console.log("currentScrollTop", currentScrollTop);
+  console.log("currentScrollRange", currentScrollRange);
+  console.log("scrollPercent", scrollPercent);
+  
+
+  // Sets the pages container to its total height 
+  pagesContainer.style.height = `${pagesContainerHeight}px`;
+  pagesContainer.style.width = `${pagesContainerWidth}px`;
+
+  const newScrollRange = pagesContainerHeight - pagesViewport.clientHeight;
+  const newScrollTop = newScrollRange * scrollPercent;
+
+  console.log("newScrollRange", newScrollRange);
+  console.log("newScrollTop", newScrollTop);
+
+
+  ignoreNextScroll = true;
+  // TODO: should this be later in the code?
+  // TODO: this should probably wait for the browser to render all the layout
+  pagesViewport.scrollTop = newScrollTop;
+
+
+  // Gets the height a row (pdf page + row gap) will have on screen 
+  const rowHeight = pdfHeightOnScreen + PAGES_CONTAINER_ROW_GAP;
+
+  // Gets the amount of pages that will appear on screen at a given time
+  const maxVisiblePagesCount = Math.ceil(pagesViewportHeight / rowHeight)
+
+  // Gets the inclusive 0 based index of the first pdf page that will be on screen
+  firstVisiblePageIndex = Math.floor(
+    Math.max(newScrollTop - PAGES_CONTAINER_PADDING, 0) / rowHeight
+  );
+
+  firstLoadedPageIndex = Math.max(0, firstVisiblePageIndex - maxVisiblePagesCount)
+  const lastLoadedPageIndex = Math.min(pdfDoc.numPages, firstVisiblePageIndex + (maxVisiblePagesCount * 2))
+
+  const loadedPagesCount = lastLoadedPageIndex - firstLoadedPageIndex
+
+
+  console.log({ newScrollTop });
+  console.log({ firstVisiblePageIndex });
+  console.log({ firstLoadedPageIndex });
+  console.log({ lastLoadedPageIndex });
+  console.log({ loadedPagesCount });
+
+  pdfCanvases = new Array(loadedPagesCount);
+  signaturesCanvases = new Array(loadedPagesCount);
+
+  pagesContainer.replaceChildren();
+  signaturesCanvasToIndex = new WeakMap();
+
+
+  for (let index = 0; index < loadedPagesCount; index++) {
+    const pdfCanvas = document.createElement("canvas");
+    pdfCanvas.className = "pdfCanvas";
+
+    // TODO: maybe this math is wrong, maybe I should try to use the pdfOnScreen height instead of rowHeight
+    pdfCanvas.style.top = `${PAGES_CONTAINER_PADDING + (firstLoadedPageIndex + index) * (rowHeight)}px`;
+
+    const signaturesCanvas = document.createElement("canvas");
+    signaturesCanvas.className = "signaturesCanvas";
+    signaturesCanvas.style.top = `${PAGES_CONTAINER_PADDING + (firstLoadedPageIndex + index) * (rowHeight)}px`;
+
+
+    signaturesCanvasToIndex.set(signaturesCanvas, index);
+
+    pagesContainer.appendChild(pdfCanvas);
+    pagesContainer.appendChild(signaturesCanvas);
+
+
+    pdfCanvases[index] = pdfCanvas;
+    signaturesCanvases[index] = signaturesCanvas;
+  }
+
+  render(pdfDoc);
+
+
+}
+
 function drawSignatureInstance(signatureInstance: SignatureInstance) {
   const { pageIndex, img, x, y, scale } = signatureInstance;
 
@@ -578,9 +575,15 @@ function drawSignatureInstance(signatureInstance: SignatureInstance) {
   const canvasRatio =
     pagesContainerRatio * (zoomPercentage / 100) * devicePixelRatio;
 
-  const context = signaturesCanvases[pageIndex].getContext("2d");
+  const canvas = signaturesCanvases[pageIndex]
 
-  if (!context) {
+  if (canvas == null) {
+    throw new Error();
+  }
+
+  const context = canvas.getContext("2d");
+
+  if (context == null) {
     throw new Error("Wasn't able to get canvas context");
   }
 
@@ -606,7 +609,7 @@ function drawSignatureInstance(signatureInstance: SignatureInstance) {
 downloadButton.addEventListener("click", download);
 
 async function download() {
-  if (!pdfFile) {
+  if (pdfFile == null) {
     throw new Error("This error should never happen");
   }
 
@@ -637,12 +640,191 @@ async function download() {
   anchor.click();
 }
 
+async function pagesContainerPointerDown(event: PointerEvent) {
+
+  if (getPointerMode() === "pan") {
+    return;
+  }
+
+  const element = document.elementFromPoint(event.clientX, event.clientY);
+
+  if (element == null) {
+    return;
+  }
+
+  const index = signaturesCanvasToIndex.get(element);
+
+  if (index == null) {
+    return;
+  }
+
+  selectedSignature = null;
+
+  const canvasRatio = pagesContainerRatio * (zoomPercentage / 100);
+
+  const rect = element.getBoundingClientRect();
+  const offsetX = event.clientX - rect.left;
+  const offsetY = event.clientY - rect.top;
+
+  const clickXOnPdf = offsetX / canvasRatio;
+  const clickYOnPdf = offsetY / canvasRatio;
+
+  const signatureInstance = signatureInstances.find((signatureInstance) => {
+    const { img, x: signatureX, y: signatureY, scale } = signatureInstance;
+    const signatureSizeRatio = SIGNATURE_WIDTH / img.width;
+    const signatureWidth = img.width * signatureSizeRatio * scale;
+    const signatureHeight = img.height * signatureSizeRatio * scale;
+    return (
+      clickXOnPdf >= signatureX &&
+      clickXOnPdf <= signatureX + signatureWidth &&
+      clickYOnPdf >= signatureY &&
+      clickYOnPdf <= signatureY + signatureHeight
+    );
+  });
+
+  if (signatureInstance) {
+    selectedSignature = {
+      signature: signatureInstance,
+      offset: {
+        x: clickXOnPdf - signatureInstance.x,
+        y: clickYOnPdf - signatureInstance.y,
+      },
+      isPressed: true,
+    };
+
+    selectedSignature.signature.lastPressedTime = Date.now();
+  }
+
+  if (pdfDoc == null) {
+    throw new Error("This error should never happen");
+  }
+  await render(pdfDoc);
+
+
+}
+async function pagesContainerPointerMove(event: PointerEvent) {
+
+  if (getPointerMode() === "pan") {
+    return;
+  }
+
+  const element = document.elementFromPoint(event.clientX, event.clientY);
+
+  if (element == null) {
+    return;
+  }
+
+  const index = signaturesCanvasToIndex.get(element);
+
+  if (index == null) {
+    return;
+  }
+
+  if (selectedSignature?.isPressed) {
+    selectedSignature.signature.pageIndex = index;
+
+    const canvasRatio = pagesContainerRatio * (zoomPercentage / 100);
+
+    const rect = element.getBoundingClientRect();
+    const offsetX = event.clientX - rect.left;
+    const offsetY = event.clientY - rect.top;
+
+    const clickXOnPdf = offsetX / canvasRatio;
+    const clickYOnPdf = offsetY / canvasRatio;
+
+    selectedSignature.signature.x = clickXOnPdf - selectedSignature.offset.x;
+    selectedSignature.signature.y = clickYOnPdf - selectedSignature.offset.y;
+
+    if (pdfDoc == null) {
+      throw new Error("This error should never happen");
+    }
+    await render(pdfDoc);
+  }
+}
+async function pagesContainerPointerUp(event: PointerEvent) {
+
+  if (getPointerMode() === "pan") {
+    return;
+  }
+
+  if (selectedSignature?.isPressed) {
+    selectedSignature.isPressed = false;
+    signatureInstances.sort((a, b) => b.lastPressedTime - a.lastPressedTime);
+  }
+
+}
+
+duplicateSignatureButton.addEventListener("click", () => {
+  if (selectedSignature) {
+    const newSignature: SignatureInstance = {
+      id: Symbol(),
+      img: selectedSignature.signature.img,
+      lastPressedTime: Date.now(),
+      pageIndex: selectedSignature.signature.pageIndex,
+      scale: selectedSignature.signature.scale,
+      svg: selectedSignature.signature.svg,
+      x: selectedSignature.signature.x,
+      y: selectedSignature.signature.y + 10,
+    };
+    signatureInstances.unshift(newSignature);
+    selectedSignature.signature = newSignature;
+
+    if (pdfDoc == null) {
+      throw new Error("pdfDoc");
+    }
+
+    render(pdfDoc);
+  }
+});
+deleteSignatureButton.addEventListener("click", () => {
+  if (selectedSignature) {
+    signatureInstances = signatureInstances.filter(
+      (signature) => signature.id !== selectedSignature?.signature.id
+    );
+    selectedSignature = null;
+
+    if (pdfDoc == null) {
+      throw new Error("pdfDoc");
+    }
+
+    render(pdfDoc);
+  }
+});
+increaseSignatureButton.addEventListener("click", () => {
+  if (selectedSignature) {
+    selectedSignature.signature.scale = Math.min(
+      selectedSignature.signature.scale * 1.1,
+      10
+    );
+
+    if (pdfDoc == null) {
+      throw new Error("pdfDoc");
+    }
+
+    render(pdfDoc);
+  }
+});
+decreaseSignatureButton.addEventListener("click", () => {
+  if (selectedSignature) {
+    selectedSignature.signature.scale = Math.max(
+      selectedSignature.signature.scale * 0.9,
+      0.1
+    );
+
+    if (pdfDoc == null) {
+      throw new Error("pdfDoc");
+    }
+
+    render(pdfDoc);
+  }
+});
+
 function getElementByIdOrThrow<K extends keyof HTMLElementTagNameMap>(
   id: string,
   tag: K
 ): HTMLElementTagNameMap[K] {
   const element = document.getElementById(id);
-  if (!element) {
+  if (element == null) {
     throw new Error(`Element with ID "${id}" not found`);
   }
 
@@ -654,3 +836,5 @@ function getElementByIdOrThrow<K extends keyof HTMLElementTagNameMap>(
 
   return element as HTMLElementTagNameMap[K];
 }
+
+function assertNever(_: never) { }

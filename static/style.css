@@ -8,25 +8,22 @@ canvas {
   display: block;
 }
 
-#pagesContainer {
-  display: flex;
-  flex-direction: column;
-  row-gap: 10px;
-
+#pagesViewport {
   height: 90dvh;
   overflow: scroll;
 }
 
-.pageContainer {
+#pagesContainer {
   position: relative;
-  border: 1px black solid;
   margin: 0px auto;
 }
 
+.pdfCanvas,
 .signaturesCanvas {
   position: absolute;
-  top: 0;
-  left: 0;
+  border: 1px black solid;
+  left: 50%;
+  transform: translateX(-50%);
 }
 
 #navbar {
