@@ -1,14 +1,14 @@
 import * as pdfjs from "pdfjs-dist";
 import workerSrc from "pdfjs-dist/build/pdf.worker.mjs?url";
 import SignaturePad from "signature_pad";
-import { PDFDocument } from "@cantoo/pdf-lib";
+import { PDFDocument, toDegrees } from "@cantoo/pdf-lib";
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
 
 type SignatureInstance = {
   id: symbol;
   img: HTMLImageElement;
-  svg: string;
+  pngDataUrl: string;
   x: number;
   y: number;
   scale: number;
@@ -286,7 +286,7 @@ signaturePad.addEventListener("beginStroke", () => {
 
 createNewSignatureButton.addEventListener("pointerup", (event) => {
   const dataUrl = signaturePad.toDataURL("image/svg+xml");
-  const svg = signaturePad.toSVG();
+  const pngDataUrl = signaturePad.toDataURL();
 
   const div = document.createElement("div");
   div.className = "signatureContainer";
@@ -304,12 +304,12 @@ createNewSignatureButton.addEventListener("pointerup", (event) => {
       const newSignatureInstance: SignatureInstance = {
         id: Symbol(),
         img,
-        svg,
         x: 50, // TODO: needs to be in the viewport
         y: 50, // TODO: needs to be in the viewport
         scale: 1,
         pageIndex: 0, // TODO: needs to be the current page
         lastPressedTime: Date.now(),
+        pngDataUrl,
       };
       signatureInstances.unshift(newSignatureInstance);
 
@@ -616,18 +616,42 @@ async function download() {
   const pdfBytes = await pdfFile.arrayBuffer();
   const pdfDocument = await PDFDocument.load(pdfBytes);
 
-  signatureInstances.forEach((signatureInstance) => {
+  signatureInstances.forEach(async (signatureInstance) => {
     const { pageIndex, img, x, y, scale } = signatureInstance;
 
     const signatureSizeRatio = SIGNATURE_WIDTH / img.width;
 
     const page = pdfDocument.getPage(pageIndex);
 
-    page.drawSvg(signatureInstance.svg, {
-      x: x,
-      y: page.getHeight() - y,
-      width: img.width * signatureSizeRatio * scale,
-      height: img.height * signatureSizeRatio * scale,
+    const pngImage = await pdfDocument.embedPng(signatureInstance.pngDataUrl)
+
+    const pageRotationInDegrees = toDegrees(page.getRotation())
+
+    const drawWidth = img.width * signatureSizeRatio * scale;
+    const drawHeight = img.height * signatureSizeRatio * scale;
+
+    const drawPosition = {
+      0: {
+        x: x,
+        y: page.getHeight() - y - drawHeight,
+      },
+      90: {
+        x: drawHeight + y,  
+        y: x,
+      },
+    }[pageRotationInDegrees]
+
+    if (drawPosition == null) {
+      alert("Angulo da pagina não suportado");
+      return;
+    }
+
+    page.drawImage(pngImage, {
+      x: drawPosition.x,
+      y: drawPosition.y,
+      width: drawWidth,
+      height: drawHeight,
+      rotate: page.getRotation(),
     });
   });
 
@@ -762,9 +786,9 @@ duplicateSignatureButton.addEventListener("click", () => {
       lastPressedTime: Date.now(),
       pageIndex: selectedSignature.signature.pageIndex,
       scale: selectedSignature.signature.scale,
-      svg: selectedSignature.signature.svg,
       x: selectedSignature.signature.x,
       y: selectedSignature.signature.y + 10,
+      pngDataUrl: selectedSignature.signature.pngDataUrl,
     };
     signatureInstances.unshift(newSignature);
     selectedSignature.signature = newSignature;
