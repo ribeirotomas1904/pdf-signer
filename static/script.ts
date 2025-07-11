@@ -22,10 +22,10 @@ type SelectedSignature = {
   isPressed: boolean;
 };
 
-type PointerMode = "pan" | "select";
+type PointerMode = "pan" | "select" | "computer";
 
 const SIGNATURE_WIDTH = 100;
-const INITIAL_ZOOM_PERCENTAGE = 80;
+const INITIAL_ZOOM_PERCENTAGE = 100;
 const PAGES_CONTAINER_PADDING = 10;
 const PAGES_CONTAINER_ROW_GAP = 10;
 
@@ -38,7 +38,6 @@ let pdfCanvases: HTMLCanvasElement[] = [];
 let signaturesCanvases: HTMLCanvasElement[] = [];
 
 let signatureInstances: SignatureInstance[] = [];
-let selectedSignature: SelectedSignature | null = null;
 
 let pagesContainerRatio = 1;
 let zoomPercentage = INITIAL_ZOOM_PERCENTAGE;
@@ -51,21 +50,46 @@ let firstVisiblePageIndex: number | null = null
 let firstLoadedPageIndex: number | null = null
 
 const [getPointerMode, setPointerMode] = (() => {
-  let pointerMode: PointerMode = "select";
+  let pointerMode: PointerMode | null = null;
 
   return [
     () => pointerMode,
     (newPointerMode: PointerMode) => {
       if (newPointerMode === "pan") {
-        selectedSignature = null;
+        setSelectedSignature(null);
         pagesContainer.style.touchAction = "auto";
+        panButton.hidden = true;
+        selectButton.hidden = false;
       } else if (newPointerMode === "select") {
         pagesContainer.style.touchAction = "none";
+        selectButton.hidden = true;
+        panButton.hidden = false;
+      } else if (newPointerMode === "computer") {
+        selectButton.hidden = true;
+        panButton.hidden = true;
       } else if (true) {
         assertNever(newPointerMode);
       }
 
       pointerMode = newPointerMode;
+    },
+  ];
+})();
+
+const [getSelectedSignature, setSelectedSignature] = (() => {
+  let selectedSignature: SelectedSignature | null = null;
+
+  return [
+    (): SelectedSignature | null  => selectedSignature,
+    (newSelectedSignature: SelectedSignature | null) => {
+      const shouldHideButtons = newSelectedSignature === null;
+
+      duplicateSignatureButton.hidden = shouldHideButtons;
+      deleteSignatureButton.hidden = shouldHideButtons;
+      increaseSignatureButton.hidden = shouldHideButtons;
+      decreaseSignatureButton.hidden = shouldHideButtons;
+
+      selectedSignature = newSelectedSignature;
     },
   ];
 })();
@@ -118,6 +142,10 @@ const decreaseSignatureButton = getElementByIdOrThrow(
   "decreaseSignatureButton",
   "button"
 );
+const navbarPdf = getElementByIdOrThrow(
+  "navbarPdf",
+  "div"
+);
 
 const pagesViewport = getElementByIdOrThrow("pagesViewport", "div");
 
@@ -133,16 +161,24 @@ const signaturePadCanvas = getElementByIdOrThrow(
 // TODO: solve this shit
 // @ts-ignore
 const signaturePad = new SignaturePad(signaturePadCanvas, {
-  minWidth: 0.3, // thin strokes for elegance
-  maxWidth: 1.2, // max stroke width for natural variation
-  throttle: 0, // reduces jitter for smoother lines
-  minDistance: 2, // minimum movement before new point, helps smoothness
+  minWidth: 2,
+  maxWidth: 2,
+  throttle: 0,
+  minDistance: 0,
 });
 
-signaturePadCanvas.style.width = `${signaturePadCanvas.width}px`;
-signaturePadCanvas.style.height = `${signaturePadCanvas.height}px`;
-signaturePadCanvas.width *= devicePixelRatio;
-signaturePadCanvas.height *= devicePixelRatio;
+console.log("OFFSET SIZE CANVAS");
+console.log(signaturePadCanvas.offsetWidth);
+console.log(signaturePadCanvas.offsetHeight);  
+
+signaturePadCanvas.style.width = `${signaturePadCanvas.offsetWidth}px`;
+signaturePadCanvas.style.height = `${signaturePadCanvas.offsetHeight}px`;
+signaturePadCanvas.width = signaturePadCanvas.offsetWidth * devicePixelRatio;
+signaturePadCanvas.height = signaturePadCanvas.offsetHeight * devicePixelRatio;
+
+signaturePadModal.hidden = true;
+signaturePadModal.classList.remove("offScreen");
+
 const context = signaturePadCanvas.getContext("2d");
 if (context == null) {
   throw new Error("Wasn't able to get canvas context");
@@ -157,11 +193,13 @@ pdfInputButton.addEventListener("click", () => {
 pdfInputButton.addEventListener("pointerdown", (event) => {
   if (event.pointerType === "touch") {
     setPointerMode("pan");
+  } else {
+    setPointerMode("computer");
   }
 });
 
 panButton.addEventListener("click", () => {
-  selectedSignature = null;
+  setSelectedSignature(null);
   if (pdfDoc == null) {
     throw new Error("This error should never happen");
   }
@@ -223,13 +261,8 @@ pdfInput.addEventListener("change", async (event) => {
   pagesContainer.addEventListener("pointerdown", pagesContainerPointerDown);
   pagesContainer.addEventListener("pointermove", pagesContainerPointerMove);
   pagesContainer.addEventListener("pointerup", pagesContainerPointerUp);
-
-  panButton.hidden = getPointerMode() === "select";
-  selectButton.hidden = getPointerMode() === "select";
-  zoomOutButton.hidden = false;
-  zoomInButton.hidden = false;
-  signButton.hidden = false;
-  downloadButton.hidden = false;
+  
+  navbarPdf.classList.remove("hidden");
 });
 
 // TODO:
@@ -313,16 +346,18 @@ createNewSignatureButton.addEventListener("pointerup", (event) => {
       };
       signatureInstances.unshift(newSignatureInstance);
 
-      selectedSignature = {
+      setSelectedSignature({
         signature: newSignatureInstance,
         isPressed: false,
         offset: {
           x: 0,
           y: 0,
         },
-      };
+      });
 
-      setPointerMode("select");
+      if (getPointerMode() !== "computer") {
+        setPointerMode("select");
+      }
 
       if (pdfDoc == null) {
         throw new Error("This error should never happen");
@@ -595,7 +630,7 @@ function drawSignatureInstance(signatureInstance: SignatureInstance) {
     img.height * signatureSizeRatio * scale * canvasRatio
   );
 
-  if (signatureInstance.id === selectedSignature?.signature.id) {
+  if (signatureInstance.id === getSelectedSignature()?.signature.id) {
     context.strokeStyle = "blue";
     context.strokeRect(
       x * canvasRatio,
@@ -682,7 +717,7 @@ async function pagesContainerPointerDown(event: PointerEvent) {
     return;
   }
 
-  selectedSignature = null;
+  setSelectedSignature(null);
 
   const canvasRatio = pagesContainerRatio * (zoomPercentage / 100);
 
@@ -707,16 +742,20 @@ async function pagesContainerPointerDown(event: PointerEvent) {
   });
 
   if (signatureInstance) {
-    selectedSignature = {
+    setSelectedSignature({
       signature: signatureInstance,
       offset: {
         x: clickXOnPdf - signatureInstance.x,
         y: clickYOnPdf - signatureInstance.y,
       },
       isPressed: true,
-    };
+    });
 
-    selectedSignature.signature.lastPressedTime = Date.now();
+    const selectedSignature = getSelectedSignature();
+
+    if (selectedSignature) {
+      selectedSignature.signature.lastPressedTime = Date.now();
+    }
   }
 
   if (pdfDoc == null) {
@@ -743,6 +782,8 @@ async function pagesContainerPointerMove(event: PointerEvent) {
   if (index == null) {
     return;
   }
+
+  const selectedSignature = getSelectedSignature();
 
   if (selectedSignature?.isPressed) {
     selectedSignature.signature.pageIndex = index;
@@ -771,6 +812,8 @@ async function pagesContainerPointerUp(event: PointerEvent) {
     return;
   }
 
+  const selectedSignature = getSelectedSignature();
+
   if (selectedSignature?.isPressed) {
     selectedSignature.isPressed = false;
     signatureInstances.sort((a, b) => b.lastPressedTime - a.lastPressedTime);
@@ -779,6 +822,8 @@ async function pagesContainerPointerUp(event: PointerEvent) {
 }
 
 duplicateSignatureButton.addEventListener("click", () => {
+  const selectedSignature = getSelectedSignature();
+
   if (selectedSignature) {
     const newSignature: SignatureInstance = {
       id: Symbol(),
@@ -801,11 +846,13 @@ duplicateSignatureButton.addEventListener("click", () => {
   }
 });
 deleteSignatureButton.addEventListener("click", () => {
+  const selectedSignature = getSelectedSignature();
+
   if (selectedSignature) {
     signatureInstances = signatureInstances.filter(
       (signature) => signature.id !== selectedSignature?.signature.id
     );
-    selectedSignature = null;
+    setSelectedSignature(null);
 
     if (pdfDoc == null) {
       throw new Error("pdfDoc");
@@ -815,6 +862,8 @@ deleteSignatureButton.addEventListener("click", () => {
   }
 });
 increaseSignatureButton.addEventListener("click", () => {
+  const selectedSignature = getSelectedSignature();
+
   if (selectedSignature) {
     selectedSignature.signature.scale = Math.min(
       selectedSignature.signature.scale * 1.1,
@@ -829,6 +878,8 @@ increaseSignatureButton.addEventListener("click", () => {
   }
 });
 decreaseSignatureButton.addEventListener("click", () => {
+  const selectedSignature = getSelectedSignature();
+
   if (selectedSignature) {
     selectedSignature.signature.scale = Math.max(
       selectedSignature.signature.scale * 0.9,

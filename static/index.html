@@ -12,38 +12,48 @@
 <body>
     <input type="file" id="pdfInput" accept=".pdf" hidden />
 
+    <button type="button" id="pdfInputButton">Escolher PDF</button>
+
     <div id="pagesViewport">
         <div id="pagesContainer">
 
         </div>
     </div>
 
-    <div id="navbar">
-        <button type="button" id="pdfInputButton">Escolher PDF</button>
-        <button type="button" id="zoomOutButton" hidden>-</button>
-        <button type="button" id="zoomInButton" hidden>+</button>
-        <button type="button" id="signButton" hidden>Assinar</button>
-        <button type="button" id="downloadButton" hidden>Baixar</button>
+    <div id="navbarPdf" class="hidden navbar">
+        <button type="button" id="signButton">Assinar</button>
         <button type="button" id="panButton" hidden>Mover</button>
         <button type="button" id="selectButton" hidden>Selecionar</button>
-        <button type="button" id="duplicateSignatureButton">Duplicar</button>
-        <button type="button" id="deleteSignatureButton">Excluir</button>
-        <button type="button" id="increaseSignatureButton">Aumentar</button>
-        <button type="button" id="decreaseSignatureButton">Diminuir</button>
+        <button type="button" id="zoomInButton">Aumentar Zoom</button>
+        <button type="button" id="zoomOutButton">Diminuir Zoom</button>
+        <button type="button" id="downloadButton">Baixar</button>
+
+        <button type="button" id="duplicateSignatureButton" hidden>Duplicar</button>
+        <button type="button" id="deleteSignatureButton" hidden>Excluir</button>
+        <button type="button" id="increaseSignatureButton" hidden>Aumentar Assinatura</button>
+        <button type="button" id="decreaseSignatureButton" hidden>Diminuir Assinatura</button>
     </div>
 
     <div id="signaturesModal" hidden>
+        <button type="button" id="newSignatureButton">
+            Nova assinatura
+        </button><button type="button" id="cancelSignaturesModal">
+            Cancelar
+        </button>
         <div id="signaturesContainer"></div>
-        <button type="button" id="newSignatureButton">Nova assinatura</button>
-        <button type="button" id="cancelSignaturesModal">Cancelar</button>
     </div>
 
-    <div id="signaturePadModal" hidden>
-        <span>Desenhe aqui</span>
-        <canvas id="signaturePadCanvas" width="300" height="150"></canvas>
-        <button type="button" id="clearNewSignatureButton" disabled>Limpar</button>
-        <button type="button" id="cancelNewSignatureButton">Cancelar</button>
-        <button type="button" id="createNewSignatureButton" disabled>Criar</button>
+    <div id="signaturePadModal" class="offScreen">
+        <canvas id="signaturePadCanvas" width="300" height="100"></canvas>
+        <div id="signaturePadModalButtonsContainer">
+            <button type="button" id="clearNewSignatureButton" disabled>
+                Limpar
+            </button><button type="button" id="cancelNewSignatureButton">
+                Cancelar
+            </button><button type="button" id="createNewSignatureButton" disabled>
+                Criar
+            </button>
+        </div>
     </div>
 
     <script type="module" src="script.js"></script>

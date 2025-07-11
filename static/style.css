@@ -26,51 +26,86 @@ canvas {
   transform: translateX(-50%);
 }
 
-#navbar {
+.navbar {
+  display: flex;
+  overflow-x: scroll;
+  padding: 10px;
+  gap: 10px;
+  align-items: center;
   height: 10dvh;
-
-  border: 1px blue solid;
+  border-top: 1px black solid;
 }
 
 button {
   font-size: 1rem;
   padding: 10px 20px;
+  white-space: nowrap;
 }
 
 #signaturesModal,
 #signaturePadModal {
+  width: 100%;
+  max-width: 500px;
+  padding: 10px;
   position: absolute;
   left: 0;
   top: 0;
   background-color: white;
-  border: 1px red solid;
+  border: 1px black solid;
 }
 
 #signaturesModal {
-  padding: 10px;
+  max-height: 90dvh;
+  overflow: scroll;
+}
+
+#newSignatureButton {
+  margin-right: 10px;
 }
 
 #signaturesContainer {
   display: flex;
   flex-direction: column;
-  row-gap: 20px;
+  row-gap: 30px;
 }
 
 #signaturesContainer:not(:empty) {
-  margin-bottom: 20px;
+  margin-top: 10px;
 }
 
-.signatureContainer {
-  display: flex;
-  align-items: center;
-  column-gap: 10px;
+.signatureContainer > img {
+  display: block;
+  width: 100%;
   border: 1px black solid;
-}
-
-#signaturePadModal {
-  padding: 20px 30px;
+  margin-bottom: 10px;
 }
 
 #signaturePadCanvas {
-  border: 1px blue solid;
+  width: 100%;
+  height: auto;
+  margin-bottom: 10px;
+}
+
+#signaturePadCanvas {
+  border: 1px black solid;
+}
+
+#signaturePadModalButtonsContainer {
+  display: flex;
+  gap: 10px;
+}
+
+#pdfInputButton {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.hidden {
+  display: none;
+}
+
+.offScreen {
+  transform: translateX(-200%);
 }

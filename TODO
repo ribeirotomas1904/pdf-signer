@@ -1,49 +1,10 @@
-- Implement go back and forward on signature
-- Select stroke color
-- Select stroke width
-- Page count
-
-- arrumar render eficiente
-
-what happens to all canvases if mobile orientation is changed?
-
-TODO: make css pixels ints like the actual canvas size, remember to test what are the values of width the canvas have compared to styles
-to check how the actual canvas size is being rounded
-
-REMEMBER TO CHNAGE SIGNATURE PAD CONFIG TO DRAW BETTER, MORE OFTEN
-
-HANDLE ZOOM CHANGING ON BROWSER, because that changes device pixel ratio
-
-REMOVE ALL GLOBAL VARIABLES ACCESSES FROM FUNCTIONS AND ACCESS THEM ONLY ON EVENT HANDLERS
-
 I THINK I NEED TO CANCEL RENDER SO I DONT TRIGGER TWO AT ONCE WHEN ZOOMING TOO QUICKLY, SEE HOW TO CANCEL RENDER ON PDFJS
 
-DEAL WITH WINDOWS RESIZE AND ZOOM AND ORIENTATION CHANGE
-
-when close to the screen border and dragging a signature, the screen should move there
-
-when pressing on the signature and scrolling with the wheel, the position of the signature should be updated
-
-IMPLEMENT CONTEXTUAL MENU FOR SIGNATURE
-- insert signature on current canvas and position
-
-ON ZOOM I NEED TO MAINTAIN THE SAME PAGE
-
-
-ERROR WHEN USING ZOOM OUT ON LAST PAGES
-
-
-
-
-
-
-
-
-
-
-
-
-
-FIX ROTATION PROBLEM
-FIX SEEING ARTIFACTS OR NOT RENDERING WHEN I STOP SOMETIMES
-IMPROVE UI A BIT
+ 
+WHEN CLOSE TO THE SCREEN BORDER AND DRAGGING A SIGNATURE, THE SCREEN SHOULD MOVE THERE
+INSERT SIGNATURE ON CURRENT CANVAS AND POSITION
+WHEN I MOVE TOO FAST, IT DOESNT RENDER
+I SEE ARTIFACTS WHEN MOVING A BIT FAST
+PAGES FLICKER ON MOVING
+EXISTING SIGNATURES FOR SELECTION ARE OVERFLOWING, AND THE SIGNATURE PAD IS NOT BIG ENOUGH ON MOBILE
+IMPROVE THE RESOLUTION IN WHICH EVERY IMG IS DRAWN ON THE PDF FILE
