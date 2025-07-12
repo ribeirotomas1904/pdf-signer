@@ -42,12 +42,13 @@ let signatureInstances: SignatureInstance[] = [];
 let pagesContainerRatio = 1;
 let zoomPercentage = INITIAL_ZOOM_PERCENTAGE;
 
-let signaturesCanvasToIndex: WeakMap<Element, number> = new WeakMap();
+let signaturesCanvasToPageIndex: WeakMap<Element, number> = new WeakMap();
 
 let pdfSize: { width: number, height: number } | null = null;
 
-let firstVisiblePageIndex: number | null = null
 let firstLoadedPageIndex: number | null = null
+let firstVisiblePageIndex: number | null = null
+let lastLoadedPageIndex: number | null = null
 
 const [getPointerMode, setPointerMode] = (() => {
   let pointerMode: PointerMode | null = null;
@@ -195,12 +196,26 @@ pdfInputButton.addEventListener("pointerdown", (event) => {
 });
 
 panButton.addEventListener("click", () => {
-  setSelectedSignature(null);
+  const pageIndex = getSelectedSignature()?.signature.pageIndex;
+  setPointerMode("pan");
+
+  if (pageIndex == null) {
+    return;
+  }
+
   if (pdfDoc == null) {
     throw new Error("This error should never happen");
   }
-  render(pdfDoc);
-  setPointerMode("pan");
+
+  const canvas = signaturesCanvases.find((canvas) => {
+    return signaturesCanvasToPageIndex.get(canvas) === pageIndex;
+  });
+
+  if (canvas == null || pageIndex < 0 || pageIndex >= pdfDoc.numPages) {
+    return;
+  }
+
+  renderSignaturesPage(pageIndex, canvas.getContext('2d'))
 });
 selectButton.addEventListener("click", () => {
   setPointerMode("select");
@@ -216,13 +231,12 @@ pagesViewport.addEventListener('scroll', () => {
 
   const currentY = pagesViewport.scrollTop;
   if (currentY === lastY) {
-    return
+    return;
   }
 
-  lastY = currentY
-  afterSizeChanges()
-}
-)
+  lastY = currentY;
+  onScroll();
+});
 
 
 pdfInput.addEventListener("change", async (event) => {
@@ -261,21 +275,14 @@ pdfInput.addEventListener("change", async (event) => {
   navbarPdf.classList.remove("hidden");
 });
 
-// TODO:
-// handle virtual list to only render a few pages at a time
-// render only what's needed
-// deal spam rendering properly and with good performance
 zoomOutButton.addEventListener("click", (event) => {
   zoomPercentage = Math.max(zoomPercentage - 10, 10);
 
   afterSizeChanges()
-
 });
 
 zoomInButton.addEventListener("click", (event) => {
   zoomPercentage = Math.min(zoomPercentage + 10, 300);
-
-
 
   afterSizeChanges()
 });
@@ -359,7 +366,15 @@ createNewSignatureButton.addEventListener("pointerup", (event) => {
       throw new Error("This error should never happen");
     }
 
-    render(pdfDoc);
+    const canvas = signaturesCanvases.find((canvas) => {
+      return signaturesCanvasToPageIndex.get(canvas) === pageIndex;
+    });
+
+    if (canvas == null || pageIndex < 0 || pageIndex >= pdfDoc.numPages) {
+      return;
+    }
+
+    renderSignaturesPage(pageIndex, canvas.getContext('2d'));
   };
 
   const pageIndex = firstVisiblePageIndex ?? 0;
@@ -387,44 +402,27 @@ createNewSignatureButton.addEventListener("pointerup", (event) => {
 
 let isRendering = false;
 
-// TODO: is this more blurry?
 async function render(pdfDoc: pdfjs.PDFDocumentProxy) {
-  if (firstLoadedPageIndex == null) {
-    return;
-  }
-
-  const savedFirstLoadedPageIndex = firstLoadedPageIndex;
-
   if (isRendering) {
     return;
   }
 
   isRendering = true;
+  
+  if (firstLoadedPageIndex == null || lastLoadedPageIndex == null) {
+    return;
+  }
 
   const renderTimeStart = performance.now();
-  let tasksDoneCount = 0;
 
-  const pdfRenderPromises = pdfCanvases.map(async (pdfCanvas, index) => {
-    const page = await pdfDoc.getPage(savedFirstLoadedPageIndex + index + 1);
+  const pdfRenderPromises = pdfCanvases.map(async (pdfCanvas, indexTEMP) => {
+    const pageIndex = signaturesCanvasToPageIndex.get(signaturesCanvases[indexTEMP])
 
-    const scale = pagesContainerRatio * (zoomPercentage / 100);
-    const scaledViewport = page.getViewport({ scale });
-
-    pdfCanvas.width = scaledViewport.width * devicePixelRatio;
-    pdfCanvas.height = scaledViewport.height * devicePixelRatio;
-    pdfCanvas.style.width = `${Math.floor(scaledViewport.width)}px`;
-    pdfCanvas.style.height = `${Math.floor(scaledViewport.height)}px`;
-
-    const signaturesCanvas = signaturesCanvases[index];
-    if (signaturesCanvas == null) {
-      throw new Error("This error should never happen");
+    if (pageIndex == null || pageIndex < 0 || pageIndex >= pdfDoc.numPages) {
+      return;
     }
-    signaturesCanvas.width = scaledViewport.width * devicePixelRatio;
-    signaturesCanvas.height = scaledViewport.height * devicePixelRatio;
-    // TODO: I need to set the css sizes to be the same I expect to draw before scaling
-    // because the canvas sizes will be ints I guess, and css accepts floats, so I should round before setting the css styles
-    signaturesCanvas.style.width = `${Math.floor(scaledViewport.width)}px`;
-    signaturesCanvas.style.height = `${Math.floor(scaledViewport.height)}px`;
+
+    const page = await pdfDoc.getPage(pageIndex + 1);
 
     const canvasContext = pdfCanvas.getContext("2d");
 
@@ -432,61 +430,179 @@ async function render(pdfDoc: pdfjs.PDFDocumentProxy) {
       throw new Error("Wasn't able to get canvas context");
     }
 
-    // TODO: I can remove this transform and just scale the viewport also using the `devicePixelRatio`
-    const transform = [devicePixelRatio, 0, 0, devicePixelRatio, 0, 0];
+    renderPdfPage(page, canvasContext)
+  });
+  
+  signaturesCanvases.forEach((canvas) => {
+    const pageIndex = signaturesCanvasToPageIndex.get(canvas)
 
-    await page.render({
-      viewport: scaledViewport,
-      canvasContext,
-      transform,
-    }).promise;
-
-    tasksDoneCount++;
-    if (tasksDoneCount === pdfCanvases.length) {
-      // console.log("PDF RENDER TIME:", performance.now() - renderTimeStart);
+    if (pageIndex == null || pageIndex < 0 || pageIndex >= pdfDoc.numPages) {
+      return;
     }
-  });
 
+    const canvasContext = canvas.getContext('2d');
+    
+    if (canvasContext == null) {
+      return;
+    }
+    
+    renderSignaturesPage(pageIndex, canvasContext);
+  });
+  
   await Promise.all(pdfRenderPromises);
-
-  signaturesCanvases.forEach((canvas, index) => {
-
-    renderSignaturePage(savedFirstLoadedPageIndex + index, canvas);
-  });
-
+  
   isRendering = false;
+  console.log("PDF RENDER TIME:", performance.now() - renderTimeStart);
 }
 
-function renderSignaturePage(pageIndex: number, canvas: HTMLCanvasElement) {
+async function renderPdfPage(pdfPage: pdfjs.PDFPageProxy, canvasContext: CanvasRenderingContext2D) {
+  const renderStartTime = performance.now();  
+
+  const scale = pagesContainerRatio * (zoomPercentage / 100) * devicePixelRatio;
+  const viewport = pdfPage.getViewport({ scale });
+  
+  canvasContext.clearRect(0, 0, canvasContext.canvas.width, canvasContext.canvas.height)
+  
+  await pdfPage.render({
+    viewport,
+    canvasContext,
+  }).promise;
+
+  console.log(`RENDERED PDF PAGE INDEX ${pdfPage.pageNumber - 1} IN ${performance.now() - renderStartTime}ms`);
+}
+
+function renderSignaturesPage(pageIndex: number, canvasContext: CanvasRenderingContext2D) {
+  const renderStartTime = performance.now();
+
+  canvasContext.clearRect(0, 0, canvasContext.canvas.width, canvasContext.canvas.height)
+
   signatureInstances.slice().reverse().forEach((signature) => {
     if (signature.pageIndex === pageIndex) {
-      drawSignatureInstance(signature, canvas);
+      renderSignatureInstance(signature, canvasContext);
     }
   })
+
+  console.log(`RENDERED SIGNATURES PAGE INDEX ${pageIndex} IN ${performance.now() - renderStartTime}ms`);
 }
 
-// list of actions that can cause a re-render and what should re-render
+function renderSignatureInstance(signatureInstance: SignatureInstance, canvasContext: CanvasRenderingContext2D) {
+  const { img, x, y, scale } = signatureInstance;
 
-// create signature -> draw just that one signature
-// delete signature -> draw signature page
-// move signature in page -> draw signature page
-// resize signature -> draw signature page
-// select signature -> draw signature page
-// deselect signature -> draw signature page
-// move signature across pages -> draw signature in both pages
+  const signatureSizeRatio = SIGNATURE_WIDTH / img.width;
+  const canvasRatio =
+    pagesContainerRatio * (zoomPercentage / 100) * devicePixelRatio;
 
-// zoom -> render everything
+  canvasContext.drawImage(
+    img,
+    x * canvasRatio,
+    y * canvasRatio,
+    img.width * signatureSizeRatio * scale * canvasRatio,
+    img.height * signatureSizeRatio * scale * canvasRatio
+  );
 
-// scroll -> render only if firstVisiblePageIndex change
+  if (signatureInstance.id === getSelectedSignature()?.signature.id) {
+    canvasContext.strokeStyle = "blue";
+    canvasContext.strokeRect(
+      x * canvasRatio,
+      y * canvasRatio,
+      img.width * signatureSizeRatio * scale * canvasRatio,
+      img.height * signatureSizeRatio * scale * canvasRatio
+    );
+  }
+}
 
-// select pdf -> render everything
+async function onScroll() {  
 
-// resize window -> render everything
+  if (pdfDoc == null || pdfSize == null) {
+    return;
+  }
 
-// change orientation -> render everything
+  if (isRendering) {
+    return;
+  }
 
+  if (firstLoadedPageIndex == null) {
+    return;
+  }
+
+  const pagesViewportHeight = pagesViewport.getBoundingClientRect().height;
+  const pdfHeightOnScreen = pdfSize.height * pagesContainerRatio * (zoomPercentage / 100);
+  const rowHeight = pdfHeightOnScreen + PAGES_CONTAINER_ROW_GAP;
+  const maxVisiblePagesCount = Math.ceil(pagesViewportHeight / rowHeight)
+
+  const newFirstVisiblePageIndex = Math.floor(
+    Math.max(pagesViewport.scrollTop - PAGES_CONTAINER_PADDING, 0) / rowHeight
+  );
+
+  const newFirstLoadedPageIndex = newFirstVisiblePageIndex - maxVisiblePagesCount;
+  const newLastLoadedPageIndex = newFirstVisiblePageIndex + (maxVisiblePagesCount * 2);
+
+  const loadedPagesCount = maxVisiblePagesCount * 3;
+
+  const distance = newFirstLoadedPageIndex - firstLoadedPageIndex;
+
+  if (distance === 0) {
+    return;
+  }
+
+  let rotation = Math.abs(distance) > loadedPagesCount ? loadedPagesCount : distance;
+
+  if (rotation > 0) {
+    while (rotation > 0) {
+      const pdfCanvas = pdfCanvases.shift()
+      const signaturesCanvas = signaturesCanvases.shift()
+
+      if (pdfCanvas && signaturesCanvas) {
+        pdfCanvases.push(pdfCanvas); 
+        signaturesCanvases.push(signaturesCanvas); 
+      }
+      rotation--;
+    }
+  } else {
+    while (rotation < 0) {
+      const pdfCanvas = pdfCanvases.pop()
+      const signaturesCanvas = signaturesCanvases.pop()
+
+      if (pdfCanvas && signaturesCanvas) {        
+        pdfCanvases.unshift(pdfCanvas); 
+        signaturesCanvases.unshift(signaturesCanvas); 
+      }
+      rotation++;
+    }
+  }
+
+  for (let index = 0; index < loadedPagesCount; index++) {
+    const pageIndex = newFirstLoadedPageIndex + index;
+    const pdfCanvas = pdfCanvases[index];
+    const signaturesCanvas = signaturesCanvases[index];
+
+    if (!pdfCanvas || !signaturesCanvas) {
+      continue
+    };
+
+    if (signaturesCanvasToPageIndex.get(signaturesCanvas) !== pageIndex && pageIndex >= 0 && pageIndex < pdfDoc.numPages) {
+      const page = await pdfDoc.getPage(pageIndex + 1);
+      renderPdfPage(page, pdfCanvas.getContext('2d'));
+      renderSignaturesPage(pageIndex, signaturesCanvas.getContext('2d'));
+    }
+
+    const top = `${PAGES_CONTAINER_PADDING + pageIndex * rowHeight}px`;
+
+    if (pdfCanvas.style.top !== top) {
+      pdfCanvas.style.top = top;
+      signaturesCanvas.style.top = top;
+    }
+
+    signaturesCanvasToPageIndex.set(signaturesCanvas, pageIndex);
+  }
+
+  firstLoadedPageIndex = newFirstLoadedPageIndex;
+  firstVisiblePageIndex = newFirstVisiblePageIndex;
+  lastLoadedPageIndex = newLastLoadedPageIndex;
+}
 
 // TODO: this should run on resize, zoom, scroll, pdf change
+// NOW: what can I remove from here and just call another function that already does the job?
 function afterSizeChanges() {
   if (isRendering) {
     return
@@ -496,23 +612,18 @@ function afterSizeChanges() {
     return;
   }
 
-  // Gets the size of the screen
   const { width: pagesViewportWidth, height: pagesViewportHeight } =
     pagesViewport.getBoundingClientRect();
 
-  // Gets the ratio that the pdf page needs to be multiplied by
-  // in order to fill the screen minus de padding considering a 100% zoom 
   pagesContainerRatio =
     (pagesViewportWidth - PAGES_CONTAINER_PADDING * 2) / pdfSize.width;
 
-  // Gets the height of the pdf on screen
   const pdfHeightOnScreen =
     pdfSize.height * pagesContainerRatio * (zoomPercentage / 100);
 
   const pdfWidthOnScreen =
     pdfSize.width * pagesContainerRatio * (zoomPercentage / 100);
 
-  // Gets the total height of all pdf pages on screen, considering padding and row gaps
   const pagesContainerHeight =
     PAGES_CONTAINER_PADDING * 2 +
     pdfHeightOnScreen * pdfDoc.numPages +
@@ -524,7 +635,6 @@ function afterSizeChanges() {
   const currentScrollRange = parseFloat(pagesContainer.style.height) - pagesViewport.clientHeight;
   const scrollPercent = currentScrollRange > 0 ? currentScrollTop / currentScrollRange : 0; 
 
-  // Sets the pages container to its total height 
   pagesContainer.style.height = `${pagesContainerHeight}px`;
   pagesContainer.style.width = `${pagesContainerWidth}px`;
 
@@ -537,27 +647,24 @@ function afterSizeChanges() {
   pagesViewport.scrollTop = newScrollTop;
 
 
-  // Gets the height a row (pdf page + row gap) will have on screen 
   const rowHeight = pdfHeightOnScreen + PAGES_CONTAINER_ROW_GAP;
 
-  // Gets the amount of pages that will appear on screen at a given time
   const maxVisiblePagesCount = Math.ceil(pagesViewportHeight / rowHeight)
 
-  // Gets the inclusive 0 based index of the first pdf page that will be on screen
   firstVisiblePageIndex = Math.floor(
     Math.max(newScrollTop - PAGES_CONTAINER_PADDING, 0) / rowHeight
   );
 
-  firstLoadedPageIndex = Math.max(0, firstVisiblePageIndex - maxVisiblePagesCount)
-  const lastLoadedPageIndex = Math.min(pdfDoc.numPages, firstVisiblePageIndex + (maxVisiblePagesCount * 2))
+  firstLoadedPageIndex = firstVisiblePageIndex - maxVisiblePagesCount;
+  lastLoadedPageIndex = pdfDoc.numPages, firstVisiblePageIndex + (maxVisiblePagesCount * 2);
 
-  const loadedPagesCount = lastLoadedPageIndex - firstLoadedPageIndex
+  const loadedPagesCount = maxVisiblePagesCount * 3;
 
   pdfCanvases = new Array(loadedPagesCount);
   signaturesCanvases = new Array(loadedPagesCount);
 
   pagesContainer.replaceChildren();
-  signaturesCanvasToIndex = new WeakMap();
+  signaturesCanvasToPageIndex = new WeakMap();
 
 
   for (let index = 0; index < loadedPagesCount; index++) {
@@ -572,7 +679,21 @@ function afterSizeChanges() {
     signaturesCanvas.style.top = `${PAGES_CONTAINER_PADDING + (firstLoadedPageIndex + index) * (rowHeight)}px`;
 
 
-    signaturesCanvasToIndex.set(signaturesCanvas, firstLoadedPageIndex + index);
+    signaturesCanvasToPageIndex.set(signaturesCanvas, firstLoadedPageIndex + index);
+    
+    pdfCanvas.width = pdfWidthOnScreen * devicePixelRatio;
+    pdfCanvas.height = pdfHeightOnScreen * devicePixelRatio;
+
+    signaturesCanvas.width = pdfWidthOnScreen * devicePixelRatio;
+    signaturesCanvas.height = pdfHeightOnScreen * devicePixelRatio;
+    
+    // TODO: I need to set the css sizes to be the same I expect to draw before scaling
+    // because the canvas sizes will be ints I guess, and css accepts floats, so I should round before setting the css styles
+    pdfCanvas.style.width = `${Math.floor(pdfWidthOnScreen)}px`;
+    pdfCanvas.style.height = `${Math.floor(pdfHeightOnScreen)}px`;
+    
+    signaturesCanvas.style.width = `${Math.floor(pdfWidthOnScreen)}px`;
+    signaturesCanvas.style.height = `${Math.floor(pdfHeightOnScreen)}px`;
 
     pagesContainer.appendChild(pdfCanvas);
     pagesContainer.appendChild(signaturesCanvas);
@@ -583,40 +704,6 @@ function afterSizeChanges() {
   }
 
   render(pdfDoc);
-
-
-}
-
-function drawSignatureInstance(signatureInstance: SignatureInstance, canvas: HTMLCanvasElement) {
-  const { img, x, y, scale } = signatureInstance;
-
-  const signatureSizeRatio = SIGNATURE_WIDTH / img.width;
-  const canvasRatio =
-    pagesContainerRatio * (zoomPercentage / 100) * devicePixelRatio;
-
-  const context = canvas.getContext("2d");
-
-  if (context == null) {
-    throw new Error("Wasn't able to get canvas context");
-  }
-
-  context.drawImage(
-    img,
-    x * canvasRatio,
-    y * canvasRatio,
-    img.width * signatureSizeRatio * scale * canvasRatio,
-    img.height * signatureSizeRatio * scale * canvasRatio
-  );
-
-  if (signatureInstance.id === getSelectedSignature()?.signature.id) {
-    context.strokeStyle = "blue";
-    context.strokeRect(
-      x * canvasRatio,
-      y * canvasRatio,
-      img.width * signatureSizeRatio * scale * canvasRatio,
-      img.height * signatureSizeRatio * scale * canvasRatio
-    );
-  }
 }
 
 downloadButton.addEventListener("click", download);
@@ -689,7 +776,7 @@ async function pagesContainerPointerDown(event: PointerEvent) {
     return;
   }
 
-  const index = signaturesCanvasToIndex.get(element);
+  const index = signaturesCanvasToPageIndex.get(element);
 
   if (index == null) {
     return;
@@ -707,11 +794,12 @@ async function pagesContainerPointerDown(event: PointerEvent) {
   const clickYOnPdf = offsetY / canvasRatio;
 
   const signatureInstance = signatureInstances.find((signatureInstance) => {
-    const { img, x: signatureX, y: signatureY, scale } = signatureInstance;
+    const { img, x: signatureX, y: signatureY, scale, pageIndex } = signatureInstance;
     const signatureSizeRatio = SIGNATURE_WIDTH / img.width;
     const signatureWidth = img.width * signatureSizeRatio * scale;
     const signatureHeight = img.height * signatureSizeRatio * scale;
     return (
+      pageIndex === index &&
       clickXOnPdf >= signatureX &&
       clickXOnPdf <= signatureX + signatureWidth &&
       clickYOnPdf >= signatureY &&
@@ -739,9 +827,12 @@ async function pagesContainerPointerDown(event: PointerEvent) {
   if (pdfDoc == null) {
     throw new Error("This error should never happen");
   }
-  await render(pdfDoc);
 
+  if (index < 0 || index >= pdfDoc.numPages) {
+    return;
+  }
 
+  renderSignaturesPage(index, element.getContext('2d'))
 }
 async function pagesContainerPointerMove(event: PointerEvent) {
 
@@ -755,19 +846,15 @@ async function pagesContainerPointerMove(event: PointerEvent) {
     return;
   }
 
-  const index = signaturesCanvasToIndex.get(element);
+  const pageIndex = signaturesCanvasToPageIndex.get(element);
 
-  if (index == null) {
+  if (pageIndex == null) {
     return;
   }
 
   const selectedSignature = getSelectedSignature();
 
   if (selectedSignature?.isPressed) {
-    // TODO: this is probably not right
-    console.log("POINTER MOVE PAGE INDEX", index);
-    
-    selectedSignature.signature.pageIndex = index;
 
     const canvasRatio = pagesContainerRatio * (zoomPercentage / 100);
 
@@ -781,10 +868,34 @@ async function pagesContainerPointerMove(event: PointerEvent) {
     selectedSignature.signature.x = clickXOnPdf - selectedSignature.offset.x;
     selectedSignature.signature.y = clickYOnPdf - selectedSignature.offset.y;
 
+    const oldPageIndex = selectedSignature.signature.pageIndex; 
+    selectedSignature.signature.pageIndex = pageIndex;
+
     if (pdfDoc == null) {
       throw new Error("This error should never happen");
     }
-    await render(pdfDoc);
+
+    const canvas = signaturesCanvases.find((canvas) => {
+      return signaturesCanvasToPageIndex.get(canvas) === pageIndex;
+    });
+
+    if (canvas == null || pageIndex < 0 || pageIndex >= pdfDoc.numPages) {
+      return;
+    }
+
+    renderSignaturesPage(pageIndex, canvas.getContext('2d'));
+    
+    if (oldPageIndex !== pageIndex) {
+      const canvas = signaturesCanvases.find((canvas) => {
+        return signaturesCanvasToPageIndex.get(canvas) === oldPageIndex;
+      });
+
+      if (canvas == null || oldPageIndex < 0 || oldPageIndex >= pdfDoc.numPages) {
+        return;
+      }
+
+      renderSignaturesPage(oldPageIndex, canvas.getContext('2d'));
+    }
   }
 }
 async function pagesContainerPointerUp(event: PointerEvent) {
@@ -823,7 +934,15 @@ duplicateSignatureButton.addEventListener("click", () => {
       throw new Error("pdfDoc");
     }
 
-    render(pdfDoc);
+    const canvas = signaturesCanvases.find((canvas) => {
+      return signaturesCanvasToPageIndex.get(canvas) === selectedSignature.signature.pageIndex;
+    });
+
+    if (canvas == null || selectedSignature.signature.pageIndex < 0 || selectedSignature.signature.pageIndex >= pdfDoc.numPages) {
+      return;
+    }
+
+    renderSignaturesPage(selectedSignature.signature.pageIndex, canvas.getContext('2d'))
   }
 });
 deleteSignatureButton.addEventListener("click", () => {
@@ -839,7 +958,15 @@ deleteSignatureButton.addEventListener("click", () => {
       throw new Error("pdfDoc");
     }
 
-    render(pdfDoc);
+    const canvas = signaturesCanvases.find((canvas) => {
+      return signaturesCanvasToPageIndex.get(canvas) === selectedSignature.signature.pageIndex;
+    });
+
+    if (canvas == null || selectedSignature.signature.pageIndex < 0 || selectedSignature.signature.pageIndex >= pdfDoc.numPages) {
+      return;
+    }
+
+    renderSignaturesPage(selectedSignature.signature.pageIndex, canvas.getContext('2d'))
   }
 });
 increaseSignatureButton.addEventListener("click", () => {
@@ -855,7 +982,15 @@ increaseSignatureButton.addEventListener("click", () => {
       throw new Error("pdfDoc");
     }
 
-    render(pdfDoc);
+    const canvas = signaturesCanvases.find((canvas) => {
+      return signaturesCanvasToPageIndex.get(canvas) === selectedSignature.signature.pageIndex;
+    });
+
+    if (canvas == null || selectedSignature.signature.pageIndex < 0 || selectedSignature.signature.pageIndex >= pdfDoc.numPages) {
+      return;
+    }
+
+    renderSignaturesPage(selectedSignature.signature.pageIndex, canvas.getContext('2d'))
   }
 });
 decreaseSignatureButton.addEventListener("click", () => {
@@ -871,7 +1006,15 @@ decreaseSignatureButton.addEventListener("click", () => {
       throw new Error("pdfDoc");
     }
 
-    render(pdfDoc);
+    const canvas = signaturesCanvases.find((canvas) => {
+      return signaturesCanvasToPageIndex.get(canvas) === selectedSignature.signature.pageIndex;
+    });
+
+    if (canvas == null || selectedSignature.signature.pageIndex < 0 || selectedSignature.signature.pageIndex >= pdfDoc.numPages) {
+      return;
+    }
+
+    renderSignaturesPage(selectedSignature.signature.pageIndex, canvas.getContext('2d'))
   }
 });
 
