@@ -167,10 +167,6 @@ const signaturePad = new SignaturePad(signaturePadCanvas, {
   minDistance: 0,
 });
 
-console.log("OFFSET SIZE CANVAS");
-console.log(signaturePadCanvas.offsetWidth);
-console.log(signaturePadCanvas.offsetHeight);  
-
 signaturePadCanvas.style.width = `${signaturePadCanvas.offsetWidth}px`;
 signaturePadCanvas.style.height = `${signaturePadCanvas.offsetHeight}px`;
 signaturePadCanvas.width = signaturePadCanvas.offsetWidth * devicePixelRatio;
@@ -277,7 +273,7 @@ zoomOutButton.addEventListener("click", (event) => {
 });
 
 zoomInButton.addEventListener("click", (event) => {
-  zoomPercentage = Math.min(zoomPercentage + 10, 200);
+  zoomPercentage = Math.min(zoomPercentage + 10, 300);
 
 
 
@@ -332,47 +328,52 @@ createNewSignatureButton.addEventListener("pointerup", (event) => {
   });
 
   const img = document.createElement("img");
-  img.addEventListener("load", (event) => {
-    const createNewSignatureInstance = () => {
-      const newSignatureInstance: SignatureInstance = {
-        id: Symbol(),
-        img,
-        x: 50, // TODO: needs to be in the viewport
-        y: 50, // TODO: needs to be in the viewport
-        scale: 1,
-        pageIndex: 0, // TODO: needs to be the current page
-        lastPressedTime: Date.now(),
-        pngDataUrl,
-      };
-      signatureInstances.unshift(newSignatureInstance);
 
-      setSelectedSignature({
-        signature: newSignatureInstance,
-        isPressed: false,
-        offset: {
-          x: 0,
-          y: 0,
-        },
-      });
-
-      if (getPointerMode() !== "computer") {
-        setPointerMode("select");
-      }
-
-      if (pdfDoc == null) {
-        throw new Error("This error should never happen");
-      }
-
-      render(pdfDoc);
+  const createNewSignatureInstance = (pageIndex: number) => {
+    const newSignatureInstance: SignatureInstance = {
+      id: Symbol(),
+      img,
+      x: 50, // TODO: needs to be in the viewport
+      y: 50, // TODO: needs to be in the viewport
+      scale: 1,
+      pageIndex,
+      lastPressedTime: Date.now(),
+      pngDataUrl,
     };
+    signatureInstances.unshift(newSignatureInstance);
 
-    createNewSignatureInstance();
+    setSelectedSignature({
+      signature: newSignatureInstance,
+      isPressed: false,
+      offset: {
+        x: 0,
+        y: 0,
+      },
+    });
 
-    img.addEventListener("click", (event) => {
-      createNewSignatureInstance();
+    if (getPointerMode() !== "computer") {
+      setPointerMode("select");
+    }
+
+    if (pdfDoc == null) {
+      throw new Error("This error should never happen");
+    }
+
+    render(pdfDoc);
+  };
+
+  const pageIndex = firstVisiblePageIndex ?? 0;
+
+  img.addEventListener("load", () => {
+    createNewSignatureInstance(pageIndex);
+  
+    img.addEventListener("click", () => {
+      createNewSignatureInstance(firstVisiblePageIndex ?? 0);
       signaturesModal.hidden = true;
     });
   });
+
+
   img.src = dataUrl;
 
   div.appendChild(img);
@@ -388,7 +389,11 @@ let isRendering = false;
 
 // TODO: is this more blurry?
 async function render(pdfDoc: pdfjs.PDFDocumentProxy) {
+  if (firstLoadedPageIndex == null) {
+    return;
+  }
 
+  const savedFirstLoadedPageIndex = firstLoadedPageIndex;
 
   if (isRendering) {
     return;
@@ -400,11 +405,7 @@ async function render(pdfDoc: pdfjs.PDFDocumentProxy) {
   let tasksDoneCount = 0;
 
   const pdfRenderPromises = pdfCanvases.map(async (pdfCanvas, index) => {
-    if (firstLoadedPageIndex == null) {
-      return
-    }
-
-    const page = await pdfDoc.getPage(firstLoadedPageIndex + index + 1);
+    const page = await pdfDoc.getPage(savedFirstLoadedPageIndex + index + 1);
 
     const scale = pagesContainerRatio * (zoomPercentage / 100);
     const scaledViewport = page.getViewport({ scale });
@@ -442,25 +443,24 @@ async function render(pdfDoc: pdfjs.PDFDocumentProxy) {
 
     tasksDoneCount++;
     if (tasksDoneCount === pdfCanvases.length) {
-      console.log("PDF RENDER TIME:", performance.now() - renderTimeStart);
+      // console.log("PDF RENDER TIME:", performance.now() - renderTimeStart);
     }
   });
 
   await Promise.all(pdfRenderPromises);
 
-  signatureInstances.reduceRight((_, signature) => {
-    drawSignatureInstance(signature);
-    return null;
-  }, null);
+  signaturesCanvases.forEach((canvas, index) => {
+
+    renderSignaturePage(savedFirstLoadedPageIndex + index, canvas);
+  });
 
   isRendering = false;
 }
 
-
-function renderSignaturePage(canvasIndex: number) {
-  signatureInstances.forEach((signature) => {
-    if (signature.pageIndex === canvasIndex) {
-      drawSignatureInstance(signature)
+function renderSignaturePage(pageIndex: number, canvas: HTMLCanvasElement) {
+  signatureInstances.slice().reverse().forEach((signature) => {
+    if (signature.pageIndex === pageIndex) {
+      drawSignatureInstance(signature, canvas);
     }
   })
 }
@@ -524,21 +524,12 @@ function afterSizeChanges() {
   const currentScrollRange = parseFloat(pagesContainer.style.height) - pagesViewport.clientHeight;
   const scrollPercent = currentScrollRange > 0 ? currentScrollTop / currentScrollRange : 0; 
 
-  console.log("currentScrollTop", currentScrollTop);
-  console.log("currentScrollRange", currentScrollRange);
-  console.log("scrollPercent", scrollPercent);
-  
-
   // Sets the pages container to its total height 
   pagesContainer.style.height = `${pagesContainerHeight}px`;
   pagesContainer.style.width = `${pagesContainerWidth}px`;
 
   const newScrollRange = pagesContainerHeight - pagesViewport.clientHeight;
   const newScrollTop = newScrollRange * scrollPercent;
-
-  console.log("newScrollRange", newScrollRange);
-  console.log("newScrollTop", newScrollTop);
-
 
   ignoreNextScroll = true;
   // TODO: should this be later in the code?
@@ -562,13 +553,6 @@ function afterSizeChanges() {
 
   const loadedPagesCount = lastLoadedPageIndex - firstLoadedPageIndex
 
-
-  console.log({ newScrollTop });
-  console.log({ firstVisiblePageIndex });
-  console.log({ firstLoadedPageIndex });
-  console.log({ lastLoadedPageIndex });
-  console.log({ loadedPagesCount });
-
   pdfCanvases = new Array(loadedPagesCount);
   signaturesCanvases = new Array(loadedPagesCount);
 
@@ -588,7 +572,7 @@ function afterSizeChanges() {
     signaturesCanvas.style.top = `${PAGES_CONTAINER_PADDING + (firstLoadedPageIndex + index) * (rowHeight)}px`;
 
 
-    signaturesCanvasToIndex.set(signaturesCanvas, index);
+    signaturesCanvasToIndex.set(signaturesCanvas, firstLoadedPageIndex + index);
 
     pagesContainer.appendChild(pdfCanvas);
     pagesContainer.appendChild(signaturesCanvas);
@@ -603,18 +587,12 @@ function afterSizeChanges() {
 
 }
 
-function drawSignatureInstance(signatureInstance: SignatureInstance) {
-  const { pageIndex, img, x, y, scale } = signatureInstance;
+function drawSignatureInstance(signatureInstance: SignatureInstance, canvas: HTMLCanvasElement) {
+  const { img, x, y, scale } = signatureInstance;
 
   const signatureSizeRatio = SIGNATURE_WIDTH / img.width;
   const canvasRatio =
     pagesContainerRatio * (zoomPercentage / 100) * devicePixelRatio;
-
-  const canvas = signaturesCanvases[pageIndex]
-
-  if (canvas == null) {
-    throw new Error();
-  }
 
   const context = canvas.getContext("2d");
 
@@ -786,6 +764,9 @@ async function pagesContainerPointerMove(event: PointerEvent) {
   const selectedSignature = getSelectedSignature();
 
   if (selectedSignature?.isPressed) {
+    // TODO: this is probably not right
+    console.log("POINTER MOVE PAGE INDEX", index);
+    
     selectedSignature.signature.pageIndex = index;
 
     const canvasRatio = pagesContainerRatio * (zoomPercentage / 100);
