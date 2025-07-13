@@ -260,7 +260,6 @@ let autoScrollState: AutoScrollState = {
   tag: "idle",
 };
 
-// TODO: when scrolling it should also update the selected signature position and page
 const autoScroll = (()=>{
   let isAutoScrolling = false; 
 
@@ -628,6 +627,7 @@ function renderSignatureInstance(signatureInstance: SignatureInstance, canvasCon
   }
 }
 
+// TODO: when scrolling it should also update the selected signature position and page
 async function onScroll() {  
 
   if (pdfDoc == null || pdfSize == null) {
