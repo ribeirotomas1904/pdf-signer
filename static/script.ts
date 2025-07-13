@@ -726,7 +726,7 @@ async function onScroll() {
 }
 
 // TODO: this should run on resize, zoom, scroll, pdf change
-// NOW: what can I remove from here and just call another function that already does the job?
+// TODO: what can I remove from here and just call another function that already does the job?
 function afterSizeChanges() {
 
   if (pdfDoc == null || pdfSize == null) {
@@ -959,8 +959,6 @@ async function pagesContainerPointerDown(event: PointerEvent) {
     });
 
     pagesViewport.dispatchEvent(moveEvent);
-
-    // NOW: this should start auto scroll too
   }
 
   if (pdfDoc == null) {
