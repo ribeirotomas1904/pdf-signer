@@ -650,10 +650,6 @@ async function onScroll() {
   const newFirstLoadedPageIndex = newFirstVisiblePageIndex - maxVisiblePagesCount;
   const newLastLoadedPageIndex = newFirstVisiblePageIndex + (maxVisiblePagesCount * 2);
 
-  if (newFirstLoadedPageIndex < 0 || newLastLoadedPageIndex - 1 >= pdfDoc.numPages) {
-    return;
-  }
-
   const loadedPagesCount = maxVisiblePagesCount * 3;
 
   const distance = newFirstLoadedPageIndex - firstLoadedPageIndex;
@@ -703,6 +699,11 @@ async function onScroll() {
     if (!pdfCanvas || !signaturesCanvas) {
       continue
     };
+
+    if (pageIndex < 0 || pageIndex >= pdfDoc.numPages) {
+      pdfCanvas.hidden = true;
+      signaturesCanvas.hidden = true;
+    }
 
     if (signaturesCanvasToPageIndex.get(signaturesCanvas) !== pageIndex && pageIndex >= 0 && pageIndex < pdfDoc.numPages) {
       const page = await pdfDoc.getPage(pageIndex + 1);
