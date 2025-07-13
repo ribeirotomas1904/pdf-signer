@@ -970,6 +970,7 @@ async function pagesContainerPointerDown(event: PointerEvent) {
   }
 
   // TODO: I should not only re-render the page that I clicked, but also the one that had the selected signature
+  // TODO: only render if selecting or deselecting a signature
   renderSignaturesPage(index, element.getContext('2d'))
 }
 async function pagesContainerPointerMove(event: PointerEvent) {
