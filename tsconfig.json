@@ -8,6 +8,8 @@
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "target": "ES2020",
+    "noImplicitAny": true,
+    "strictNullChecks": true,
   },
   "include": ["static", "types"],
 }

@@ -238,6 +238,113 @@ pagesViewport.addEventListener('scroll', () => {
   onScroll();
 });
 
+type AutoScrollState = 
+{
+  tag: "scrolling",
+  scrollDelta: {
+    x: number,
+    y: number,
+  }
+  clientX: number,
+  clientY: number,
+}
+|
+{
+  tag: "idle"
+};
+
+const BORDER_THRESHOLD = 80;
+
+let autoScrollState: AutoScrollState = {
+  tag: "idle",
+};
+
+// TODO: when scrolling it should also update the selected signature position and page
+const autoScroll = (()=>{
+  let isAutoScrolling = false; 
+
+  return () => {
+    if (isAutoScrolling) {
+      return;
+    }
+
+    const loop = () => {
+      if (autoScrollState.tag === "idle") {
+        isAutoScrolling = false;
+        return;
+      }
+
+      isAutoScrolling = true;
+  
+      pagesViewport.scrollLeft += autoScrollState.scrollDelta.x;
+      pagesViewport.scrollTop += autoScrollState.scrollDelta.y;
+
+      const moveEvent = new PointerEvent('pointermove', {
+        clientX: autoScrollState.clientX,
+        clientY: autoScrollState.clientY,
+      });
+
+      pagesContainer.dispatchEvent(moveEvent);
+      
+      requestAnimationFrame(loop);
+    }
+
+    loop()
+  };
+})();
+
+pagesViewport.addEventListener('pointermove', (event) => {
+  if (!getSelectedSignature()?.isPressed) {
+    autoScrollState = {
+      tag: "idle",
+    };
+
+    return;
+  }
+
+  const rect = pagesViewport.getBoundingClientRect();
+  const nearLeft = event.clientX - rect.left < BORDER_THRESHOLD;
+  const nearRight = rect.right - event.clientX < BORDER_THRESHOLD;
+  const nearTop = event.clientY - rect.top < BORDER_THRESHOLD;
+  const nearBottom = rect.bottom - event.clientY < BORDER_THRESHOLD;
+
+  if (!nearLeft && !nearRight && !nearTop && !nearBottom) {
+    autoScrollState = {
+      tag: "idle",
+    };
+
+    return;
+  }
+
+  const deltaX = 
+    nearLeft ?
+       -10 :
+       (nearRight ?
+        10 :
+        0
+       )
+
+  const deltaY = 
+    nearTop ?
+       -10 :
+       (nearBottom ?
+        10 :
+        0
+       )
+ 
+  autoScrollState = {
+    tag: "scrolling",
+    scrollDelta: {
+      x: deltaX,
+      y: deltaY,
+    },
+    clientX: event.clientX,
+    clientY: event.clientY,
+  };
+  
+  autoScroll();
+ 
+});
 
 pdfInput.addEventListener("change", async (event) => {
   pdfFile = pdfInput.files?.[0] ?? null;
@@ -822,6 +929,15 @@ async function pagesContainerPointerDown(event: PointerEvent) {
     if (selectedSignature) {
       selectedSignature.signature.lastPressedTime = Date.now();
     }
+
+    const moveEvent = new PointerEvent("pointermove", {
+      clientX: event.clientX,
+      clientY: event.clientY,
+    });
+
+    pagesViewport.dispatchEvent(moveEvent);
+
+    // NOW: this should start auto scroll too
   }
 
   if (pdfDoc == null) {
@@ -832,6 +948,7 @@ async function pagesContainerPointerDown(event: PointerEvent) {
     return;
   }
 
+  // TODO: I should not only re-render the page that I clicked, but also the one that had the selected signature
   renderSignaturesPage(index, element.getContext('2d'))
 }
 async function pagesContainerPointerMove(event: PointerEvent) {
@@ -907,6 +1024,15 @@ async function pagesContainerPointerUp(event: PointerEvent) {
   const selectedSignature = getSelectedSignature();
 
   if (selectedSignature?.isPressed) {
+    autoScrollState = { tag: "idle" };
+
+    const moveEvent = new PointerEvent('pointermove', {
+      clientX: event.clientX,
+      clientY: event.clientY,
+    });
+
+    pagesContainer.dispatchEvent(moveEvent);
+
     selectedSignature.isPressed = false;
     signatureInstances.sort((a, b) => b.lastPressedTime - a.lastPressedTime);
   }
